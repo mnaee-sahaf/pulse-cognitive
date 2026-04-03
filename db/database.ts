@@ -13,6 +13,13 @@ async function migrate(db: SQLite.SQLiteDatabase) {
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
 
+    CREATE TABLE IF NOT EXISTS companion (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      companion_id TEXT NOT NULL,
+      level INTEGER NOT NULL DEFAULT 5,
+      xp INTEGER NOT NULL DEFAULT 0
+    );
+
     CREATE TABLE IF NOT EXISTS sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       session_id TEXT NOT NULL UNIQUE,

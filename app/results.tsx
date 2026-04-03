@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -19,13 +19,19 @@ import { useGameStore } from '../store/gameStore';
 import { Colors, FontSize, Spacing } from '../constants/theme';
 import { saveSession, getProfileSeedData } from '../db/sessions';
 import { updatePlayerProfile } from '../db/playerProfile';
+import { awardXp, loadCompanion, scoreToXp, type CompanionState } from '../db/companion';
+import { Companion } from '../components/Companion';
 
 export default function ResultsScreen() {
   const router = useRouter();
   const { summary, engine, resetSession } = useGameStore();
   const savedRef = useRef(false);
+  const [companion, setCompanion] = useState<CompanionState | null>(null);
+  const [xpGained, setXpGained] = useState(0);
+  const [leveledUp, setLeveledUp] = useState(false);
+  const [evolved, setEvolved] = useState(false);
 
-  // Persist session once on mount
+  // Persist session and award XP once on mount
   useEffect(() => {
     if (!summary || savedRef.current) return;
     savedRef.current = true;
@@ -34,6 +40,12 @@ export default function ResultsScreen() {
       await saveSession(summary, engine.roundHistory.map(() => engine.levers));
       const seed = await getProfileSeedData(10);
       await updatePlayerProfile(seed.avgRts, seed.maxSequenceLengths, seed.flexRatings);
+
+      const result = await awardXp(summary.totalScore);
+      setCompanion(result.state);
+      setXpGained(scoreToXp(summary.totalScore));
+      setLeveledUp(result.leveledUp);
+      setEvolved(result.evolved);
     };
     persist().catch(console.error);
   }, []);
@@ -99,6 +111,26 @@ export default function ResultsScreen() {
             <Text style={styles.engineVal}>{summary.mutationsSurvived}</Text>
           </View>
         </View>
+
+        {/* Companion XP */}
+        {companion && (
+          <View style={styles.companionCard}>
+            <Companion state={companion} size={56} showInfo={true} celebrating={leveledUp} />
+            <View style={styles.xpBadge}>
+              <Text style={styles.xpBadgeText}>+{xpGained} XP</Text>
+            </View>
+            {evolved && (
+              <View style={styles.evolutionBanner}>
+                <Text style={styles.evolutionText}>EVOLVED!</Text>
+              </View>
+            )}
+            {leveledUp && !evolved && (
+              <View style={styles.levelUpBanner}>
+                <Text style={styles.levelUpText}>LEVEL UP → {companion.level}</Text>
+              </View>
+            )}
+          </View>
+        )}
 
         {/* CTAs */}
         <View style={styles.ctaGroup}>
@@ -286,6 +318,55 @@ const styles = StyleSheet.create({
     fontFamily: 'serif',
   },
   ctaGroup: { gap: 12 },
+  companionCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: Spacing.cardRadius,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    padding: 20,
+    alignItems: 'center',
+    gap: 12,
+  },
+  xpBadge: {
+    backgroundColor: Colors.accentSoft,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.accent + '44',
+  },
+  xpBadgeText: {
+    fontSize: FontSize.label,
+    fontWeight: '600',
+    color: Colors.accent,
+    letterSpacing: 1,
+  },
+  evolutionBanner: {
+    backgroundColor: '#F59E0B22',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.warning + '44',
+  },
+  evolutionText: {
+    fontSize: FontSize.label,
+    fontWeight: '700',
+    color: Colors.warning,
+    letterSpacing: 2,
+  },
+  levelUpBanner: {
+    backgroundColor: Colors.accentSoft,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  levelUpText: {
+    fontSize: FontSize.label,
+    fontWeight: '700',
+    color: Colors.accent,
+    letterSpacing: 1.5,
+  },
   ctaPrimary: {
     backgroundColor: Colors.accent,
     paddingVertical: 18,

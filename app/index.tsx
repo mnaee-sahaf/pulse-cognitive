@@ -6,24 +6,27 @@ import {
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { useFocusEffect } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Colors, FontSize, Spacing } from '../constants/theme';
 import { getLifetimeStats } from '../db/sessions';
+import { loadCompanion, type CompanionState } from '../db/companion';
+import { Companion } from '../components/Companion';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const [stats, setStats] = useState({
-    sessionCount: 0,
-    bestRt: 0,
-    avgScore: 0,
-  });
+  const [stats, setStats] = useState({ sessionCount: 0, bestRt: 0, avgScore: 0 });
+  const [companion, setCompanion] = useState<CompanionState | null>(null);
 
   useFocusEffect(
     useCallback(() => {
-      getLifetimeStats()
-        .then((s) => setStats(s))
-        .catch(console.error);
+      getLifetimeStats().then(setStats).catch(console.error);
+      loadCompanion().then((c) => {
+        if (!c) {
+          router.replace('/choose-companion');
+        } else {
+          setCompanion(c);
+        }
+      }).catch(console.error);
     }, [])
   );
 
@@ -39,19 +42,14 @@ export default function HomeScreen() {
           <Text style={styles.tagline}>Adaptive Cognitive Training</Text>
         </View>
 
+        {companion && (
+          <Companion state={companion} size={72} showInfo={true} />
+        )}
+
         <View style={styles.metricsRow}>
-          <MetricBlock
-            label="Sessions"
-            value={hasStats ? String(stats.sessionCount) : '—'}
-          />
-          <MetricBlock
-            label="Best RT"
-            value={hasStats ? `${stats.bestRt}ms` : '—'}
-          />
-          <MetricBlock
-            label="Avg Score"
-            value={hasStats ? String(stats.avgScore) : '—'}
-          />
+          <MetricBlock label="Sessions" value={hasStats ? String(stats.sessionCount) : '—'} />
+          <MetricBlock label="Best RT" value={hasStats ? `${stats.bestRt}ms` : '—'} />
+          <MetricBlock label="Avg Score" value={hasStats ? String(stats.avgScore) : '—'} />
         </View>
 
         <Pressable
@@ -85,22 +83,16 @@ function MetricBlock({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
+  safe: { flex: 1, backgroundColor: Colors.background },
   container: {
     flex: 1,
     paddingHorizontal: Spacing.pagePadding,
-    paddingTop: 48,
+    paddingTop: 32,
     paddingBottom: 32,
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  header: {
-    alignItems: 'center',
-    gap: 8,
-  },
+  header: { alignItems: 'center', gap: 8 },
   logo: {
     fontFamily: 'serif',
     fontSize: FontSize.logo,
@@ -108,9 +100,7 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     letterSpacing: -0.5,
   },
-  dot: {
-    color: Colors.accent,
-  },
+  dot: { color: Colors.accent },
   tagline: {
     fontSize: FontSize.label,
     fontWeight: '500',
@@ -118,15 +108,8 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     textTransform: 'uppercase',
   },
-  metricsRow: {
-    flexDirection: 'row',
-    gap: 24,
-  },
-  metricBlock: {
-    alignItems: 'center',
-    gap: 4,
-    minWidth: 72,
-  },
+  metricsRow: { flexDirection: 'row', gap: 24 },
+  metricBlock: { alignItems: 'center', gap: 4, minWidth: 72 },
   metricValue: {
     fontSize: FontSize.display,
     fontWeight: '600',
@@ -148,20 +131,14 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
   },
-  ctaPressed: {
-    opacity: 0.85,
-  },
+  ctaPressed: { opacity: 0.85 },
   ctaText: {
     fontSize: 17,
     fontWeight: '600',
     color: '#FFFFFF',
     letterSpacing: 0.3,
   },
-  bottomRow: {
-    alignItems: 'center',
-    gap: 16,
-    width: '100%',
-  },
+  bottomRow: { alignItems: 'center', gap: 16, width: '100%' },
   secondaryBtn: {
     paddingVertical: 12,
     paddingHorizontal: 32,
