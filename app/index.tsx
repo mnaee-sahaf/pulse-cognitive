@@ -61,7 +61,15 @@ export default function HomeScreen() {
           <Text style={styles.ctaText}>Begin Session</Text>
         </Pressable>
 
-        <Text style={styles.hint}>60 seconds · 4 cognitive metrics</Text>
+        <View style={styles.bottomRow}>
+          <Pressable
+            style={({ pressed }) => [styles.secondaryBtn, pressed && styles.ctaPressed]}
+            onPress={() => router.push('/history')}
+          >
+            <Text style={styles.secondaryBtnText}>History</Text>
+          </Pressable>
+          <Text style={styles.hint}>60 seconds · 4 cognitive metrics</Text>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -148,6 +156,25 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
     letterSpacing: 0.3,
+  },
+  bottomRow: {
+    alignItems: 'center',
+    gap: 16,
+    width: '100%',
+  },
+  secondaryBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+    borderRadius: Spacing.cardRadius,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    width: '100%',
+    alignItems: 'center',
+  },
+  secondaryBtnText: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: Colors.textSecondary,
   },
   hint: {
     fontSize: FontSize.label,
