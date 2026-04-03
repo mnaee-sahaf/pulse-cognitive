@@ -90,7 +90,7 @@ export function createInitialGameState(profile: PlayerProfile | null): GameState
 /** Computes flash duration for the current round based on tempo ramp history. */
 function calcFlashDuration(roundCount: number, tempoRamp: number): number {
   const duration = INITIAL_FLASH_DURATION + tempoRamp * roundCount;
-  return Math.max(200, duration);
+  return Math.max(300, duration); // floor raised from 200ms → 300ms
 }
 
 /** Builds the next round state from engine settings. */

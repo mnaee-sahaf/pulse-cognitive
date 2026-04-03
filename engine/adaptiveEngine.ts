@@ -113,12 +113,12 @@ export function updateEngine(
     if (accuracy > 0.9 && avgRt < 350) {
       // Player is well below ceiling — accelerate all axes
       levers.sequenceGrowth = 2;
-      levers.tempoRamp = -40;
+      levers.tempoRamp = -30; // was -40, capped to avoid overwhelming speed ramp
       levers.mutationRate = clampMutationRate(levers.mutationRate + 0.15);
     } else if (accuracy > 0.9 && avgRt > 450) {
       // Memory fine, speed slow — push RT only
       levers.sequenceGrowth = 1;
-      levers.tempoRamp = -35;
+      levers.tempoRamp = -30; // was -35
     } else if (accuracy >= 0.7 && accuracy <= 0.9 && avgRt < 400) {
       // Target ZPD — don't adjust
     } else if (accuracy < 0.7) {
@@ -137,14 +137,17 @@ export function updateEngine(
     }
   }
 
-  // Grid expansion — engine-triggered, not fixed round
-  if (currentRound >= 4 && levers.gridSize === 3) {
-    const accuracy = rollingAccuracy(history, 3);
-    if (accuracy > 0.88) levers.gridSize = 4;
+  // Grid expansion — requires 3 consecutive rounds above threshold, not just one check
+  const last3Accuracies = history.slice(-3).map((r) =>
+    r.total === 0 ? 1 : r.correct / r.total
+  );
+  const allStrong = last3Accuracies.length === 3 && last3Accuracies.every((a) => a > 0.88);
+
+  if (currentRound >= 6 && levers.gridSize === 3 && allStrong) {
+    levers.gridSize = 4;
   }
-  if (currentRound >= 8 && levers.gridSize === 4) {
-    const accuracy = rollingAccuracy(history, 3);
-    if (accuracy > 0.88) levers.gridSize = 5;
+  if (currentRound >= 12 && levers.gridSize === 4 && allStrong) {
+    levers.gridSize = 5;
   }
 
   // Compute intensity (0–1) — how hard the engine is pushing
