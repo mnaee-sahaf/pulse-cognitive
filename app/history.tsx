@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -16,11 +16,13 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { getRecentSessions, type StoredSession } from '../db/sessions';
+import { exportSessionsCsv } from '../db/export';
 import { Colors, FontSize, Spacing } from '../constants/theme';
 
 export default function HistoryScreen() {
   const router = useRouter();
   const [sessions, setSessions] = useState<StoredSession[]>([]);
+  const [exporting, setExporting] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -37,7 +39,21 @@ export default function HistoryScreen() {
           <Text style={styles.backText}>←</Text>
         </Pressable>
         <Text style={styles.title}>History</Text>
-        <View style={{ width: 32 }} />
+        <Pressable
+          onPress={async () => {
+            setExporting(true);
+            await exportSessionsCsv().catch(console.error);
+            setExporting(false);
+          }}
+          disabled={exporting || sessions.length === 0}
+        >
+          <Text style={[
+            styles.exportBtn,
+            (exporting || sessions.length === 0) && styles.exportBtnDisabled,
+          ]}>
+            {exporting ? 'Exporting…' : 'Export CSV'}
+          </Text>
+        </Pressable>
       </View>
 
       {sessions.length === 0 ? (
@@ -352,5 +368,14 @@ const styles = StyleSheet.create({
     fontSize: FontSize.label,
     color: Colors.textTertiary,
     letterSpacing: 0.5,
+  },
+  exportBtn: {
+    fontSize: FontSize.label,
+    fontWeight: '500',
+    color: Colors.accent,
+    letterSpacing: 0.5,
+  },
+  exportBtnDisabled: {
+    color: Colors.textTertiary,
   },
 });
