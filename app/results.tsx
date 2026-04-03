@@ -1,0 +1,315 @@
+import React, { useEffect, useRef } from 'react';
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  ScrollView,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withDelay,
+  Easing,
+} from 'react-native-reanimated';
+import { useRouter } from 'expo-router';
+import { useGameStore } from '../store/gameStore';
+import { Colors, FontSize, Spacing } from '../constants/theme';
+import { saveSession, getProfileSeedData } from '../db/sessions';
+import { updatePlayerProfile } from '../db/playerProfile';
+
+export default function ResultsScreen() {
+  const router = useRouter();
+  const { summary, engine, resetSession } = useGameStore();
+  const savedRef = useRef(false);
+
+  // Persist session once on mount
+  useEffect(() => {
+    if (!summary || savedRef.current) return;
+    savedRef.current = true;
+
+    const persist = async () => {
+      await saveSession(summary, engine.roundHistory.map(() => engine.levers));
+      const seed = await getProfileSeedData(10);
+      await updatePlayerProfile(seed.avgRts, seed.maxSequenceLengths, seed.flexRatings);
+    };
+    persist().catch(console.error);
+  }, []);
+
+  if (!summary) {
+    router.replace('/');
+    return null;
+  }
+
+  const { cognitiveScores, totalScore, roundsCompleted, avgRt, bestRt, accuracy } = summary;
+
+  const metrics = [
+    { label: 'Reaction Speed', score: cognitiveScores.rtScore, color: Colors.accent },
+    { label: 'Working Memory', score: cognitiveScores.wmScore, color: '#8B5CF6' },
+    { label: 'Flexibility', score: cognitiveScores.flexScore, color: Colors.warning },
+    { label: 'Decision Speed', score: cognitiveScores.decisionScore, color: Colors.success },
+  ];
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.sessionLabel}>SESSION COMPLETE</Text>
+          <Text style={styles.totalScore}>{totalScore.toLocaleString()}</Text>
+          <Text style={styles.scoreLabel}>POINTS</Text>
+        </View>
+
+        {/* Quick stats */}
+        <View style={styles.statsRow}>
+          <StatBlock label="Rounds" value={String(roundsCompleted)} />
+          <StatBlock label="Avg RT" value={`${Math.round(avgRt)}ms`} />
+          <StatBlock label="Best RT" value={`${Math.round(bestRt)}ms`} />
+          <StatBlock label="Accuracy" value={`${Math.round(accuracy * 100)}%`} />
+        </View>
+
+        {/* Cognitive profile bars */}
+        <View style={styles.profileSection}>
+          <Text style={styles.sectionLabel}>COGNITIVE PROFILE</Text>
+          {metrics.map((m, i) => (
+            <MetricBar key={m.label} {...m} delay={i * 100} />
+          ))}
+        </View>
+
+        {/* Engine report */}
+        <View style={styles.engineCard}>
+          <Text style={styles.sectionLabel}>ADAPTIVE ENGINE</Text>
+          <View style={styles.engineRow}>
+            <Text style={styles.engineKey}>Intensity Reached</Text>
+            <Text style={styles.engineVal}>
+              {Math.round(summary.engineIntensity * 100)}%
+            </Text>
+          </View>
+          <View style={styles.engineRow}>
+            <Text style={styles.engineKey}>Mutations Faced</Text>
+            <Text style={styles.engineVal}>{summary.mutationsFaced.length}</Text>
+          </View>
+          <View style={styles.engineRow}>
+            <Text style={styles.engineKey}>Mutations Survived</Text>
+            <Text style={styles.engineVal}>{summary.mutationsSurvived}</Text>
+          </View>
+        </View>
+
+        {/* CTAs */}
+        <View style={styles.ctaGroup}>
+          <Pressable
+            style={({ pressed }) => [styles.ctaPrimary, pressed && styles.ctaPressed]}
+            onPress={() => router.replace('/countdown')}
+          >
+            <Text style={styles.ctaPrimaryText}>Play Again</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.ctaSecondary, pressed && styles.ctaPressed]}
+            onPress={() => {
+              resetSession();
+              router.replace('/');
+            }}
+          >
+            <Text style={styles.ctaSecondaryText}>Home</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function StatBlock({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.statBlock}>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label.toUpperCase()}</Text>
+    </View>
+  );
+}
+
+function MetricBar({
+  label,
+  score,
+  color,
+  delay,
+}: {
+  label: string;
+  score: number;
+  color: string;
+  delay: number;
+}) {
+  const width = useSharedValue(0);
+
+  useEffect(() => {
+    width.value = withDelay(
+      delay,
+      withTiming(score, {
+        duration: 800,
+        easing: Easing.bezier(0.22, 1, 0.36, 1),
+      })
+    );
+  }, []);
+
+  const barStyle = useAnimatedStyle(() => ({
+    width: `${width.value}%`,
+    backgroundColor: color,
+  }));
+
+  return (
+    <View style={styles.metricRow}>
+      <View style={styles.metricLabelRow}>
+        <Text style={styles.metricName}>{label}</Text>
+        <Text style={[styles.metricScore, { color }]}>{score}</Text>
+      </View>
+      <View style={styles.barTrack}>
+        <Animated.View style={[styles.barFill, barStyle]} />
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: Colors.background },
+  scroll: {
+    paddingHorizontal: Spacing.pagePadding,
+    paddingTop: 40,
+    paddingBottom: 48,
+    gap: 32,
+  },
+  header: { alignItems: 'center', gap: 6 },
+  sessionLabel: {
+    fontSize: FontSize.label,
+    fontWeight: '500',
+    color: Colors.textTertiary,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+  },
+  totalScore: {
+    fontSize: 64,
+    fontWeight: '600',
+    fontFamily: 'serif',
+    color: Colors.textPrimary,
+    letterSpacing: -2,
+  },
+  scoreLabel: {
+    fontSize: FontSize.label,
+    fontWeight: '500',
+    color: Colors.accent,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.surface,
+    borderRadius: Spacing.cardRadius,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    padding: 20,
+  },
+  statBlock: { alignItems: 'center', gap: 4 },
+  statValue: {
+    fontSize: 20,
+    fontWeight: '600',
+    fontFamily: 'serif',
+    color: Colors.textPrimary,
+  },
+  statLabel: {
+    fontSize: FontSize.label - 1,
+    fontWeight: '500',
+    color: Colors.textTertiary,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  profileSection: {
+    gap: 16,
+  },
+  sectionLabel: {
+    fontSize: FontSize.label,
+    fontWeight: '500',
+    color: Colors.textTertiary,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  metricRow: { gap: 8 },
+  metricLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+  },
+  metricName: {
+    fontSize: FontSize.body,
+    fontWeight: '500',
+    color: Colors.textPrimary,
+  },
+  metricScore: {
+    fontSize: 20,
+    fontWeight: '600',
+    fontFamily: 'serif',
+  },
+  barTrack: {
+    height: 4,
+    backgroundColor: Colors.border,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  barFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  engineCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: Spacing.cardRadius,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    padding: 20,
+    gap: 12,
+  },
+  engineRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  engineKey: {
+    fontSize: FontSize.body,
+    color: Colors.textSecondary,
+  },
+  engineVal: {
+    fontSize: FontSize.body,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+    fontFamily: 'serif',
+  },
+  ctaGroup: { gap: 12 },
+  ctaPrimary: {
+    backgroundColor: Colors.accent,
+    paddingVertical: 18,
+    borderRadius: Spacing.cardRadius,
+    alignItems: 'center',
+  },
+  ctaSecondary: {
+    backgroundColor: Colors.surface,
+    paddingVertical: 16,
+    borderRadius: Spacing.cardRadius,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+  },
+  ctaPressed: { opacity: 0.8 },
+  ctaPrimaryText: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+  },
+  ctaSecondaryText: {
+    fontSize: 17,
+    fontWeight: '500',
+    color: Colors.textPrimary,
+  },
+});
