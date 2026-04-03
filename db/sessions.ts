@@ -42,9 +42,9 @@ export async function saveSession(
       new Date().toISOString(),
       summary.roundsCompleted,
       summary.totalScore,
-      JSON.stringify(summary.allRts),
-      summary.avgRt,
-      summary.bestRt,
+      JSON.stringify(summary.allRts.map((rt) => Math.round(rt))),
+      Math.round(summary.avgRt),
+      Math.round(summary.bestRt),
       summary.accuracy,
       JSON.stringify(summary.mutationsFaced),
       summary.mutationsSurvived,
@@ -85,7 +85,7 @@ export async function getLifetimeStats(): Promise<{
   return {
     sessionCount: row?.session_count ?? 0,
     bestScore: row?.best_score ?? 0,
-    bestRt: row?.best_rt ?? 0,
+    bestRt: Math.round(row?.best_rt ?? 0),
     avgScore: Math.round(row?.avg_score ?? 0),
   };
 }
