@@ -21,6 +21,7 @@ import { saveSession, getProfileSeedData } from '../db/sessions';
 import { updatePlayerProfile } from '../db/playerProfile';
 import { awardXp, loadCompanion, scoreToXp, type CompanionState } from '../db/companion';
 import { Companion } from '../components/Companion';
+import { LevelUpModal } from '../components/LevelUpModal';
 
 export default function ResultsScreen() {
   const router = useRouter();
@@ -30,6 +31,7 @@ export default function ResultsScreen() {
   const [xpGained, setXpGained] = useState(0);
   const [leveledUp, setLeveledUp] = useState(false);
   const [evolved, setEvolved] = useState(false);
+  const [showLevelUpModal, setShowLevelUpModal] = useState(false);
 
   // Persist session and award XP once on mount
   useEffect(() => {
@@ -46,6 +48,7 @@ export default function ResultsScreen() {
       setXpGained(scoreToXp(summary.totalScore));
       setLeveledUp(result.leveledUp);
       setEvolved(result.evolved);
+      if (result.leveledUp) setShowLevelUpModal(true);
     };
     persist().catch(console.error);
   }, []);
@@ -151,6 +154,15 @@ export default function ResultsScreen() {
           </Pressable>
         </View>
       </ScrollView>
+
+      {companion && (
+        <LevelUpModal
+          visible={showLevelUpModal}
+          companion={companion}
+          evolved={evolved}
+          onDismiss={() => setShowLevelUpModal(false)}
+        />
+      )}
     </SafeAreaView>
   );
 }
