@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { Colors, FontSize, Spacing } from '../constants/theme';
 import { getLifetimeStats } from '../db/sessions';
 
@@ -18,11 +19,13 @@ export default function HomeScreen() {
     avgScore: 0,
   });
 
-  useEffect(() => {
-    getLifetimeStats()
-      .then((s) => setStats(s))
-      .catch(console.error);
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      getLifetimeStats()
+        .then((s) => setStats(s))
+        .catch(console.error);
+    }, [])
+  );
 
   const hasStats = stats.sessionCount > 0;
 
