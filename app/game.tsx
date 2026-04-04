@@ -9,6 +9,8 @@ import { useRouter } from 'expo-router';
 import { useGameStore } from '../store/gameStore';
 import { Grid } from '../components/Grid';
 import { Colors, FontSize, Spacing } from '../constants/theme';
+import { AnimatedBackground } from '../components/AnimatedBackground';
+import { useAppSettings } from '../store/appSettingsStore';
 
 export default function GameScreen() {
   const router = useRouter();
@@ -28,6 +30,7 @@ export default function GameScreen() {
     advanceRound,
   } = state;
 
+  const animatedBackground = useAppSettings((s) => s.animatedBackground);
   const watchEndTimeRef = useRef(0);
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -94,6 +97,7 @@ export default function GameScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
+      {animatedBackground && <AnimatedBackground />}
       <View style={styles.container}>
         {/* HUD */}
         <View style={styles.hud}>
