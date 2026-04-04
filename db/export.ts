@@ -6,6 +6,7 @@ const CSV_HEADERS = [
   'session_id',
   'timestamp',
   'rounds_completed',
+  'max_sequence_length',
   'total_score',
   'avg_rt_ms',
   'best_rt_ms',
@@ -17,6 +18,7 @@ const CSV_HEADERS = [
   'wm_score',
   'flex_score',
   'decision_score',
+  'engine_lever_log',
 ].join(',');
 
 function escapeCell(value: string | number): string {
@@ -39,6 +41,7 @@ export async function exportSessionsCsv(): Promise<void> {
       s.sessionId,
       s.timestamp,
       s.roundsCompleted,
+      s.maxSequenceLength,
       s.totalScore,
       s.avgRt.toFixed(1),
       s.bestRt,
@@ -50,6 +53,7 @@ export async function exportSessionsCsv(): Promise<void> {
       s.wmScore,
       s.flexScore,
       s.decisionScore,
+      JSON.stringify(s.engineLeverLog),
     ]
       .map(escapeCell)
       .join(',')
