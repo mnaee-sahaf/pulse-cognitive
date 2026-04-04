@@ -45,7 +45,7 @@ export default function ResultsScreen() {
     const persist = async () => {
       await saveSession(summary, engine.leverHistory);
       const seed = await getProfileSeedData(10);
-      await updatePlayerProfile(seed.avgRts, seed.maxSequenceLengths, seed.flexRatings);
+      await updatePlayerProfile(seed.avgRts, seed.maxSequenceLengths, seed.flexRatings, seed.accuracies);
 
       const result = await awardXp(summary.totalScore);
       setCompanion(result.state);

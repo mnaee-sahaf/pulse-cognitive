@@ -98,11 +98,12 @@ export async function getLifetimeStats(): Promise<{
 export async function getProfileSeedData(n = 10): Promise<{
   avgRts: number[];
   maxSequenceLengths: number[];
+  accuracies: number[];
   flexRatings: number[];
 }> {
   const db = await getDb();
   const rows = await db.getAllAsync<any>(
-    `SELECT avg_rt, rounds_completed, mutations_faced, mutations_survived
+    `SELECT avg_rt, rounds_completed, max_sequence_length, accuracy, mutations_faced, mutations_survived
      FROM sessions ORDER BY timestamp DESC LIMIT ?`,
     [n]
   );
@@ -110,6 +111,7 @@ export async function getProfileSeedData(n = 10): Promise<{
   return {
     avgRts: rows.map((r: any) => r.avg_rt),
     maxSequenceLengths: rows.map((r: any) => r.max_sequence_length || r.rounds_completed + 2),
+    accuracies: rows.map((r: any) => r.accuracy),
     flexRatings: rows.map((r: any) => {
       const faced = JSON.parse(r.mutations_faced).length;
       return faced === 0 ? 0.5 : r.mutations_survived / faced;

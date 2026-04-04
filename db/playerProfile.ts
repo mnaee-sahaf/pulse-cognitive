@@ -22,7 +22,8 @@ export async function loadPlayerProfile(): Promise<PlayerProfile | null> {
 export async function updatePlayerProfile(
   recentAvgRts: number[],
   recentMaxSequences: number[],
-  recentFlexRatings: number[]
+  recentFlexRatings: number[],
+  recentAccuracies: number[]
 ): Promise<PlayerProfile> {
   const avg = (arr: number[]) =>
     arr.length === 0 ? 0 : arr.reduce((a, b) => a + b, 0) / arr.length;
@@ -30,7 +31,13 @@ export async function updatePlayerProfile(
   const baselineRt = avg(recentAvgRts) || 450;
   const wmCapacity = avg(recentMaxSequences) || 4;
   const flexRating = avg(recentFlexRatings) || 0.5;
-  const speedAccuracyThreshold = baselineRt * 0.75; // rough estimate
+
+  // Use avg RT from sessions where accuracy dropped below 80% as the threshold.
+  // These sessions represent where speed started to hurt recall — the crossover point.
+  // Fall back to 75% of baseline RT if no low-accuracy sessions exist yet.
+  const lowAccuracyRts = recentAvgRts.filter((_, i) => recentAccuracies[i] < 0.8);
+  const speedAccuracyThreshold =
+    lowAccuracyRts.length > 0 ? avg(lowAccuracyRts) : baselineRt * 0.75;
 
   const profile: PlayerProfile = {
     baselineRt,
