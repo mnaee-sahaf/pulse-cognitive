@@ -151,9 +151,8 @@ export function processTap(
     return { nextState: {}, sessionEnded: false };
   }
 
-  const rt = tapTime - (state.tapResults.length === 0 ? watchEndTime : tapTime);
-  // For simplicity: RT is time since the watch phase ended for first tap,
-  // subsequent taps measured from the previous tap
+  // RT is time since the watch phase ended for the first tap;
+  // subsequent taps measured from the previous tap's absolute time.
   const lastTapTime = state.tapResults.length > 0
     ? watchEndTime + state.sessionRts.slice(-state.tapResults.length).reduce((a, b) => a + b, 0)
     : watchEndTime;
