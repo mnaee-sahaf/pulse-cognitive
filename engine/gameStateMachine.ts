@@ -42,6 +42,7 @@ export interface TapResult {
 export interface SessionSummary {
   totalScore: number;
   roundsCompleted: number;
+  maxSequenceLength: number;
   allRts: number[];
   avgRt: number;
   bestRt: number;
@@ -300,7 +301,7 @@ export function buildSummary(state: GameState): SessionSummary {
     ? state.sessionCorrect / state.sessionTotal
     : 0;
 
-  const maxSeq = state.round?.displaySequence.length ?? 3;
+  const maxSeq = state.round?.displaySequence.length ?? 2;
   const avgRtValue = avgRt;
   const peakTempoAccuracy = accuracy;
 
@@ -315,6 +316,7 @@ export function buildSummary(state: GameState): SessionSummary {
   return {
     totalScore: state.totalScore,
     roundsCompleted: state.roundCount,
+    maxSequenceLength: maxSeq,
     allRts,
     avgRt: avgRtValue,
     bestRt,

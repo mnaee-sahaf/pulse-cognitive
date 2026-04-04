@@ -61,6 +61,7 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
 async function migrate(db: SQLite.SQLiteDatabase) {
   // Add columns introduced after initial schema — safe to run on every startup
   // Additive column migrations — catch silences "duplicate column" on new installs
+  await db.execAsync(`ALTER TABLE sessions ADD COLUMN max_sequence_length INTEGER NOT NULL DEFAULT 0`).catch(() => {});
   await db.execAsync(`ALTER TABLE app_settings ADD COLUMN background_intensity REAL NOT NULL DEFAULT 1.0`).catch(() => {});
   await db.execAsync(`ALTER TABLE app_settings ADD COLUMN lives INTEGER NOT NULL DEFAULT 3`).catch(() => {});
   await db.execAsync(`ALTER TABLE app_settings ADD COLUMN green_tile_feedback INTEGER NOT NULL DEFAULT 1`).catch(() => {});
@@ -115,6 +116,7 @@ async function migrate(db: SQLite.SQLiteDatabase) {
       session_id TEXT NOT NULL UNIQUE,
       timestamp TEXT NOT NULL,
       rounds_completed INTEGER NOT NULL,
+      max_sequence_length INTEGER NOT NULL DEFAULT 0,
       total_score INTEGER NOT NULL,
       reaction_times TEXT NOT NULL,
       avg_rt REAL NOT NULL,

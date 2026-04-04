@@ -7,6 +7,7 @@ export interface StoredSession {
   sessionId: string;
   timestamp: string;
   roundsCompleted: number;
+  maxSequenceLength: number;
   totalScore: number;
   reactionTimes: number[];
   avgRt: number;
@@ -31,16 +32,17 @@ export async function saveSession(
 
   await db.runAsync(
     `INSERT INTO sessions (
-      session_id, timestamp, rounds_completed, total_score,
+      session_id, timestamp, rounds_completed, max_sequence_length, total_score,
       reaction_times, avg_rt, best_rt, accuracy,
       mutations_faced, mutations_survived,
       engine_lever_log, engine_intensity,
       wm_score, rt_score, flex_score, decision_score
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       sessionId,
       new Date().toISOString(),
       summary.roundsCompleted,
+      summary.maxSequenceLength,
       summary.totalScore,
       JSON.stringify(summary.allRts.map((rt) => Math.round(rt))),
       Math.round(summary.avgRt),
@@ -107,7 +109,7 @@ export async function getProfileSeedData(n = 10): Promise<{
 
   return {
     avgRts: rows.map((r: any) => r.avg_rt),
-    maxSequenceLengths: rows.map((r: any) => r.rounds_completed + 2), // approx
+    maxSequenceLengths: rows.map((r: any) => r.max_sequence_length || r.rounds_completed + 2),
     flexRatings: rows.map((r: any) => {
       const faced = JSON.parse(r.mutations_faced).length;
       return faced === 0 ? 0.5 : r.mutations_survived / faced;
@@ -121,6 +123,7 @@ function deserializeSession(row: any): StoredSession {
     sessionId: row.session_id,
     timestamp: row.timestamp,
     roundsCompleted: row.rounds_completed,
+    maxSequenceLength: row.max_sequence_length ?? 0,
     totalScore: row.total_score,
     reactionTimes: JSON.parse(row.reaction_times),
     avgRt: row.avg_rt,
