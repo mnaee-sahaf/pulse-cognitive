@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -25,6 +25,7 @@ export default function GameScreen() {
     totalScore,
     engine,
     roundCount,
+    lives,
     setFlashIndex,
     startRecall,
     handleTap,
@@ -35,6 +36,15 @@ export default function GameScreen() {
   const backgroundIntensity = useAppSettings((s) => s.backgroundIntensity);
   const watchEndTimeRef = useRef(0);
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevLivesRef = useRef(lives);
+
+  // Buzz when a life is lost
+  useEffect(() => {
+    if (lives < prevLivesRef.current) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+    prevLivesRef.current = lives;
+  }, [lives]);
 
   // Watch phase: flash cells in sequence
   useEffect(() => {
@@ -121,6 +131,14 @@ export default function GameScreen() {
                 <Text style={styles.mutationText}>{mutationLabel}</Text>
               </View>
             )}
+            <View style={styles.livesRow}>
+              {Array.from({ length: 3 }, (_, i) => (
+                <View
+                  key={i}
+                  style={[styles.lifesDot, i < lives && styles.lifesDotActive]}
+                />
+              ))}
+            </View>
           </View>
           <View style={styles.hudRight}>
             <Text style={styles.roundNum}>R{roundCount}</Text>
@@ -238,6 +256,23 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.warning,
     letterSpacing: 1.5,
+  },
+  livesRow: {
+    flexDirection: 'row',
+    gap: 5,
+    marginTop: 4,
+  },
+  lifesDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: Colors.border,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  lifesDotActive: {
+    backgroundColor: Colors.danger,
+    borderColor: Colors.danger,
   },
   seqRow: {
     flexDirection: 'row',

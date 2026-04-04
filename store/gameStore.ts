@@ -52,12 +52,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   handleTap: (cellIndex, tapTime) => {
     const state = get();
-    const watchEndTime = state._watchEndTime;
-    const { nextState, sessionEnded } = processTap(state, cellIndex, tapTime, watchEndTime);
-    set(nextState as Partial<GameStore>);
+    const { nextState, sessionEnded } = processTap(state, cellIndex, tapTime, state._watchEndTime);
 
-    if (!sessionEnded && nextState.phase === 'feedback') {
-      // Auto-advance after brief feedback delay (handled in UI)
+    if (sessionEnded && state.lives > 1) {
+      // Life lost — rebuild round at the same sequence length (sequenceGrowth = 0)
+      const rebuiltState: GameState = {
+        ...state,
+        engine: { ...state.engine, levers: { ...state.engine.levers, sequenceGrowth: 0 } },
+      };
+      const newRound = buildRound(rebuiltState);
+      set({
+        lives: state.lives - 1,
+        recallProgress: [],
+        tapResults: [],
+        phase: 'watch',
+        round: newRound,
+      });
+    } else {
+      set(nextState as Partial<GameStore>);
     }
   },
 

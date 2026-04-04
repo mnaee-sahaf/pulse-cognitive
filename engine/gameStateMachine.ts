@@ -64,6 +64,7 @@ export interface GameState {
   roundCount: number;
   summary: SessionSummary | null;
   currentFlashIndex: number;  // which cell is currently illuminated (-1 = none)
+  lives: number;              // remaining lives (session ends at 0)
 }
 
 const INITIAL_FLASH_GAP = 250; // ms between cells
@@ -87,6 +88,7 @@ export function createInitialGameState(
     roundCount: 0,
     summary: null,
     currentFlashIndex: -1,
+    lives: 3,
   };
 }
 
