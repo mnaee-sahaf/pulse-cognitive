@@ -7,10 +7,11 @@ import {
   type GameState,
 } from '../engine/gameStateMachine';
 import type { PlayerProfile } from '../engine/adaptiveEngine';
+import { ENGINE_CONFIG_DEFAULTS, type EngineConfig } from '../engine/engineConfig';
 
 interface GameStore extends GameState {
   // Actions
-  startSession: (profile: PlayerProfile | null) => void;
+  startSession: (profile: PlayerProfile | null, config?: EngineConfig) => void;
   startWatch: () => void;
   setFlashIndex: (index: number) => void;
   startRecall: (watchEndTime: number) => void;
@@ -24,8 +25,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   ...createInitialGameState(null),
   _watchEndTime: 0,
 
-  startSession: (profile) => {
-    const initial = createInitialGameState(profile);
+  startSession: (profile, config = ENGINE_CONFIG_DEFAULTS) => {
+    const initial = createInitialGameState(profile, config);
     const firstRound = buildRound(initial);
     set({
       ...initial,

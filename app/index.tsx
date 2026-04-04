@@ -60,12 +60,20 @@ export default function HomeScreen() {
         </Pressable>
 
         <View style={styles.bottomRow}>
-          <Pressable
-            style={({ pressed }) => [styles.secondaryBtn, pressed && styles.ctaPressed]}
-            onPress={() => router.push('/history')}
-          >
-            <Text style={styles.secondaryBtnText}>History</Text>
-          </Pressable>
+          <View style={styles.secondaryRow}>
+            <Pressable
+              style={({ pressed }) => [styles.secondaryBtn, { flex: 1 }, pressed && styles.ctaPressed]}
+              onPress={() => router.push('/history')}
+            >
+              <Text style={styles.secondaryBtnText}>History</Text>
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [styles.secondaryBtn, styles.settingsBtn, pressed && styles.ctaPressed]}
+              onPress={() => router.push('/settings')}
+            >
+              <Text style={styles.secondaryBtnText}>⚙</Text>
+            </Pressable>
+          </View>
           <Text style={styles.hint}>60 seconds · 4 cognitive metrics</Text>
         </View>
       </View>
@@ -139,14 +147,18 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   bottomRow: { alignItems: 'center', gap: 16, width: '100%' },
+  secondaryRow: { flexDirection: 'row', gap: 12, width: '100%' },
   secondaryBtn: {
     paddingVertical: 12,
     paddingHorizontal: 32,
     borderRadius: Spacing.cardRadius,
     borderWidth: 1.5,
     borderColor: Colors.border,
-    width: '100%',
     alignItems: 'center',
+  },
+  settingsBtn: {
+    flex: 0,
+    paddingHorizontal: 16,
   },
   secondaryBtnText: {
     fontSize: 15,

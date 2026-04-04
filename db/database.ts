@@ -49,5 +49,10 @@ async function migrate(db: SQLite.SQLiteDatabase) {
       session_count INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS engine_config (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      config_json TEXT NOT NULL
+    );
   `);
 }

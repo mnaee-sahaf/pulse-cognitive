@@ -13,6 +13,7 @@ import {
   type PlayerProfile,
   type RoundPerformance,
 } from './adaptiveEngine';
+import { ENGINE_CONFIG_DEFAULTS, type EngineConfig } from './engineConfig';
 import { calcRoundScore, calcCognitiveScores, type CognitiveScores } from './scoring';
 
 export type GamePhase = 'idle' | 'watch' | 'recall' | 'feedback' | 'ended';
@@ -67,7 +68,10 @@ export interface GameState {
 
 const INITIAL_FLASH_GAP = 250; // ms between cells
 
-export function createInitialGameState(profile: PlayerProfile | null): GameState {
+export function createInitialGameState(
+  profile: PlayerProfile | null,
+  config: EngineConfig = ENGINE_CONFIG_DEFAULTS
+): GameState {
   return {
     phase: 'idle',
     round: null,
@@ -79,7 +83,7 @@ export function createInitialGameState(profile: PlayerProfile | null): GameState
     sessionTotal: 0,
     mutationsFaced: [],
     mutationsSurvived: 0,
-    engine: initEngine(profile),
+    engine: initEngine(profile, config),
     roundCount: 0,
     summary: null,
     currentFlashIndex: -1,

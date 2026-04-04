@@ -1,4 +1,5 @@
 import type { GridSize, Mutation } from './sequenceGenerator';
+import { ENGINE_CONFIG_DEFAULTS, type EngineConfig } from './engineConfig';
 
 export interface LeverSettings {
   sequenceGrowth: 0 | 1 | 2 | 3; // elements added per round (0 = hold at current length)
@@ -28,6 +29,7 @@ export interface EngineState {
   consecutiveFailedMutations: number;
   intensity: number;             // 0.0–1.0 snapshot of how hard the engine is pushing
   currentFlashDuration: number;  // ms — accumulates tempo deltas each round
+  config: EngineConfig;          // tuning config snapshot for this session
 }
 
 const DEFAULT_LEVERS: LeverSettings = {
@@ -44,13 +46,16 @@ const DEFAULT_PROFILE: PlayerProfile = {
   speedAccuracyThreshold: 350,
 };
 
-export function initEngine(profile: PlayerProfile | null): EngineState {
+export function initEngine(
+  profile: PlayerProfile | null,
+  config: EngineConfig = ENGINE_CONFIG_DEFAULTS
+): EngineState {
   const p = profile ?? DEFAULT_PROFILE;
 
   // Seed initial levers from player profile
   const levers: LeverSettings = {
     sequenceGrowth: p.wmCapacity >= 6 ? 2 : 1,
-    tempoRamp: p.baselineRt < 350 ? -20 : -10,
+    tempoRamp: p.baselineRt < 350 ? config.pushTempoRamp : config.defaultTempoRamp,
     mutationRate: p.flexRating > 0.6 ? 0.2 : 0,
     gridSize: 3,
   };
@@ -61,7 +66,8 @@ export function initEngine(profile: PlayerProfile | null): EngineState {
     consecutiveMutationSurvives: 0,
     consecutiveFailedMutations: 0,
     intensity: 0,
-    currentFlashDuration: 600,
+    currentFlashDuration: config.initialFlashDuration,
+    config,
   };
 }
 
@@ -107,28 +113,33 @@ export function updateEngine(
     consecutiveMutationSurvives = 0;
   }
 
-  // Don't adjust aggressively in the first 2 rounds
-  if (currentRound >= 2) {
+  const cfg = state.config;
+
+  if (currentRound < cfg.warmupRounds) {
+    // Warm-up phase: fixed gentle escalation, no adaptation
+    levers.sequenceGrowth = 1;
+    levers.tempoRamp = cfg.warmupTempoRamp;
+  } else {
     const accuracy = rollingAccuracy(history, 3);
     const avgRt = rollingAvgRt(history, 3);
 
-    if (accuracy > 0.9 && avgRt < 350) {
+    if (accuracy > cfg.zpdUpper && avgRt < cfg.rtFastThreshold) {
       // Player is well below ceiling — accelerate all axes
-      levers.sequenceGrowth = 2;
-      levers.tempoRamp = -30;
+      levers.sequenceGrowth = Math.min(3, cfg.accelGrowth) as 0 | 1 | 2 | 3;
+      levers.tempoRamp = cfg.accelTempoRamp;
       levers.mutationRate = clampMutationRate(levers.mutationRate + 0.15);
-    } else if (accuracy > 0.9 && avgRt > 450) {
+    } else if (accuracy > cfg.zpdUpper && avgRt > cfg.rtSlowThreshold) {
       // Memory fine, speed lagging — push tempo only
       levers.sequenceGrowth = 1;
-      levers.tempoRamp = -20;
-    } else if (accuracy >= 0.8 && accuracy <= 0.9 && avgRt < 400) {
+      levers.tempoRamp = cfg.pushTempoRamp;
+    } else if (accuracy >= cfg.overwhelmThreshold && accuracy <= cfg.zpdUpper) {
       // Target ZPD — hold steady, don't grow sequence
       levers.sequenceGrowth = 0;
       levers.tempoRamp = 0;
-    } else if (accuracy < 0.8) {
+    } else if (accuracy < cfg.overwhelmThreshold) {
       // Overwhelmed — ease back and slow down
       levers.sequenceGrowth = 1;
-      levers.tempoRamp = +40;
+      levers.tempoRamp = cfg.easeTempoRamp;
       levers.mutationRate = clampMutationRate(levers.mutationRate - 0.15);
     }
 
@@ -145,19 +156,21 @@ export function updateEngine(
   const last3Accuracies = history.slice(-3).map((r) =>
     r.total === 0 ? 1 : r.correct / r.total
   );
-  const allStrong = last3Accuracies.length === 3 && last3Accuracies.every((a) => a > 0.88);
+  const allStrong =
+    last3Accuracies.length === 3 &&
+    last3Accuracies.every((a) => a > cfg.gridExpandAccuracy);
 
-  if (currentRound >= 6 && levers.gridSize === 3 && allStrong) {
+  if (currentRound >= cfg.gridExpand3to4Round && levers.gridSize === 3 && allStrong) {
     levers.gridSize = 4;
   }
-  if (currentRound >= 12 && levers.gridSize === 4 && allStrong) {
+  if (currentRound >= cfg.gridExpand4to5Round && levers.gridSize === 4 && allStrong) {
     levers.gridSize = 5;
   }
 
   // Accumulate tempo: apply this round's ramp delta to the running flash duration
   const newFlashDuration = Math.min(
-    800,
-    Math.max(300, state.currentFlashDuration + levers.tempoRamp)
+    cfg.flashCeiling,
+    Math.max(cfg.flashFloor, state.currentFlashDuration + levers.tempoRamp)
   );
 
   // Compute intensity (0–1) — how hard the engine is pushing
@@ -173,6 +186,7 @@ export function updateEngine(
     consecutiveFailedMutations,
     intensity: Math.min(1, intensityScore),
     currentFlashDuration: newFlashDuration,
+    config: state.config,
   };
 }
 

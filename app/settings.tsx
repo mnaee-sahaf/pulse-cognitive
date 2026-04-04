@@ -1,0 +1,386 @@
+import React, { useCallback, useState } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Share,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { Colors, FontSize, Spacing } from '../constants/theme';
+import { ENGINE_CONFIG_DEFAULTS, type EngineConfig } from '../engine/engineConfig';
+import { loadEngineConfig, saveEngineConfig } from '../db/engineConfig';
+
+// ------- Draft state — all values stored as strings while editing -------
+type DraftConfig = { [K in keyof EngineConfig]: string };
+
+function toDraft(c: EngineConfig): DraftConfig {
+  return Object.fromEntries(
+    Object.entries(c).map(([k, v]) => [k, String(v)])
+  ) as DraftConfig;
+}
+
+function fromDraft(d: DraftConfig): EngineConfig | null {
+  const result: Partial<EngineConfig> = {};
+  for (const key of Object.keys(ENGINE_CONFIG_DEFAULTS) as (keyof EngineConfig)[]) {
+    const val = parseFloat(d[key]);
+    if (isNaN(val)) return null;
+    (result as any)[key] = val;
+  }
+  return result as EngineConfig;
+}
+
+// ------- Section / field metadata -------
+interface FieldMeta {
+  key: keyof EngineConfig;
+  label: string;
+  hint: string;
+  unit?: string;
+}
+interface Section {
+  title: string;
+  fields: FieldMeta[];
+}
+
+const SECTIONS: Section[] = [
+  {
+    title: 'Warm-Up Phase',
+    fields: [
+      { key: 'warmupRounds',    label: 'Warm-up Rounds',      hint: 'Rounds before adaptive engine reads accuracy', unit: 'rounds' },
+      { key: 'warmupTempoRamp', label: 'Warm-up Tempo Ramp',  hint: 'ms delta per warm-up round (negative = faster)', unit: 'ms/round' },
+    ],
+  },
+  {
+    title: 'Flash Timing',
+    fields: [
+      { key: 'initialFlashDuration', label: 'Initial Flash',  hint: 'Starting ms per cell illuminate', unit: 'ms' },
+      { key: 'flashFloor',           label: 'Flash Floor',    hint: 'Fastest the game can get', unit: 'ms' },
+      { key: 'flashCeiling',         label: 'Flash Ceiling',  hint: 'Slowest (cap when easing back)', unit: 'ms' },
+    ],
+  },
+  {
+    title: 'Decision Thresholds',
+    fields: [
+      { key: 'overwhelmThreshold', label: 'Overwhelm Threshold', hint: 'Accuracy below this → ease back (0–1)', unit: '' },
+      { key: 'zpdUpper',           label: 'ZPD Upper Bound',     hint: 'Accuracy above this → push harder (0–1)', unit: '' },
+      { key: 'rtFastThreshold',    label: 'RT Fast Threshold',   hint: 'RT below this = player is fast', unit: 'ms' },
+      { key: 'rtSlowThreshold',    label: 'RT Slow Threshold',   hint: 'RT above this = player is slow', unit: 'ms' },
+    ],
+  },
+  {
+    title: 'Branch: Accelerate All',
+    fields: [
+      { key: 'accelTempoRamp', label: 'Accel Tempo Ramp', hint: 'ms delta when pushing hard (negative = faster)', unit: 'ms/round' },
+      { key: 'accelGrowth',    label: 'Accel Growth',     hint: 'Sequence cells added per round (0–3)', unit: 'cells' },
+    ],
+  },
+  {
+    title: 'Branch: Push Tempo',
+    fields: [
+      { key: 'pushTempoRamp', label: 'Push Tempo Ramp', hint: 'ms delta for tempo-only push', unit: 'ms/round' },
+    ],
+  },
+  {
+    title: 'Branch: Ease Back',
+    fields: [
+      { key: 'easeTempoRamp', label: 'Ease Tempo Ramp', hint: 'ms delta when overwhelmed (positive = slower)', unit: 'ms/round' },
+    ],
+  },
+  {
+    title: 'Cold Start (No History)',
+    fields: [
+      { key: 'defaultTempoRamp', label: 'Default Tempo Ramp', hint: 'Starting ramp for brand-new players', unit: 'ms/round' },
+    ],
+  },
+  {
+    title: 'Grid Expansion',
+    fields: [
+      { key: 'gridExpand3to4Round',  label: '3→4 Earliest Round', hint: 'Round before which grid never expands 3x3→4x4', unit: '' },
+      { key: 'gridExpand4to5Round',  label: '4→5 Earliest Round', hint: 'Round before which grid never expands 4x4→5x5', unit: '' },
+      { key: 'gridExpandAccuracy',   label: 'Expand Accuracy',    hint: 'Min accuracy each of last 3 rounds to trigger expand (0–1)', unit: '' },
+    ],
+  },
+];
+
+export default function SettingsScreen() {
+  const router = useRouter();
+  const [draft, setDraft] = useState<DraftConfig>(toDraft(ENGINE_CONFIG_DEFAULTS));
+  const [saved, setSaved] = useState(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadEngineConfig().then((cfg) => setDraft(toDraft(cfg))).catch(console.error);
+    }, [])
+  );
+
+  function updateField(key: keyof EngineConfig, value: string) {
+    setDraft((d) => ({ ...d, [key]: value }));
+    setSaved(false);
+  }
+
+  async function handleSave() {
+    const config = fromDraft(draft);
+    if (!config) {
+      Alert.alert('Invalid values', 'All fields must be valid numbers.');
+      return;
+    }
+    await saveEngineConfig(config);
+    setSaved(true);
+  }
+
+  function handleReset() {
+    Alert.alert('Reset to Defaults?', 'This will overwrite your current preset.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Reset',
+        style: 'destructive',
+        onPress: () => {
+          setDraft(toDraft(ENGINE_CONFIG_DEFAULTS));
+          setSaved(false);
+        },
+      },
+    ]);
+  }
+
+  async function handleShare() {
+    const config = fromDraft(draft) ?? ENGINE_CONFIG_DEFAULTS;
+    const json = JSON.stringify(config, null, 2);
+    await Share.share({ message: `Pulse Engine Config:\n\`\`\`json\n${json}\n\`\`\`` });
+  }
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Header */}
+          <View style={styles.header}>
+            <Pressable onPress={() => router.back()} style={styles.backBtn}>
+              <Text style={styles.backText}>← Back</Text>
+            </Pressable>
+            <Text style={styles.title}>Engine Settings</Text>
+            <Text style={styles.subtitle}>
+              Changes apply on the next session start. Save your preset, then share the JSON to log it back.
+            </Text>
+          </View>
+
+          {/* Sections */}
+          {SECTIONS.map((section) => (
+            <View key={section.title} style={styles.section}>
+              <Text style={styles.sectionTitle}>{section.title.toUpperCase()}</Text>
+              <View style={styles.card}>
+                {section.fields.map((field, i) => (
+                  <View
+                    key={field.key}
+                    style={[
+                      styles.fieldRow,
+                      i < section.fields.length - 1 && styles.fieldDivider,
+                    ]}
+                  >
+                    <View style={styles.fieldLeft}>
+                      <Text style={styles.fieldLabel}>{field.label}</Text>
+                      <Text style={styles.fieldHint}>{field.hint}</Text>
+                    </View>
+                    <View style={styles.fieldRight}>
+                      <TextInput
+                        style={styles.input}
+                        value={draft[field.key]}
+                        onChangeText={(v) => updateField(field.key, v)}
+                        keyboardType="numeric"
+                        selectTextOnFocus
+                        returnKeyType="done"
+                      />
+                      {field.unit ? (
+                        <Text style={styles.unit}>{field.unit}</Text>
+                      ) : null}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </View>
+          ))}
+
+          {/* Actions */}
+          <View style={styles.actions}>
+            <Pressable
+              style={({ pressed }) => [styles.btnPrimary, pressed && styles.pressed]}
+              onPress={handleSave}
+            >
+              <Text style={styles.btnPrimaryText}>
+                {saved ? 'Saved ✓' : 'Save Preset'}
+              </Text>
+            </Pressable>
+
+            <View style={styles.rowBtns}>
+              <Pressable
+                style={({ pressed }) => [styles.btnSecondary, { flex: 1 }, pressed && styles.pressed]}
+                onPress={handleShare}
+              >
+                <Text style={styles.btnSecondaryText}>Share JSON</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.btnSecondary, { flex: 1 }, pressed && styles.pressed]}
+                onPress={handleReset}
+              >
+                <Text style={[styles.btnSecondaryText, { color: Colors.warning }]}>
+                  Reset Defaults
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+
+          {/* JSON preview */}
+          <View style={styles.jsonBlock}>
+            <Text style={styles.sectionTitle}>CURRENT PRESET JSON</Text>
+            <Text selectable style={styles.jsonText}>
+              {JSON.stringify(fromDraft(draft) ?? draft, null, 2)}
+            </Text>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: Colors.background },
+  scroll: {
+    paddingHorizontal: Spacing.pagePadding,
+    paddingTop: 24,
+    paddingBottom: 60,
+    gap: 24,
+  },
+  header: { gap: 8 },
+  backBtn: { marginBottom: 4 },
+  backText: {
+    fontSize: FontSize.body,
+    color: Colors.accent,
+    fontWeight: '500',
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: '600',
+    fontFamily: 'serif',
+    color: Colors.textPrimary,
+    letterSpacing: -0.5,
+  },
+  subtitle: {
+    fontSize: FontSize.body,
+    color: Colors.textSecondary,
+    lineHeight: 20,
+  },
+  section: { gap: 8 },
+  sectionTitle: {
+    fontSize: FontSize.label,
+    fontWeight: '600',
+    color: Colors.textTertiary,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  card: {
+    backgroundColor: Colors.surface,
+    borderRadius: Spacing.cardRadius,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    overflow: 'hidden',
+  },
+  fieldRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 12,
+  },
+  fieldDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  fieldLeft: { flex: 1, gap: 2 },
+  fieldLabel: {
+    fontSize: FontSize.body,
+    fontWeight: '500',
+    color: Colors.textPrimary,
+  },
+  fieldHint: {
+    fontSize: 11,
+    color: Colors.textTertiary,
+    lineHeight: 15,
+  },
+  fieldRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  input: {
+    backgroundColor: Colors.background,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: FontSize.body,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+    minWidth: 64,
+    textAlign: 'right',
+  },
+  unit: {
+    fontSize: 11,
+    color: Colors.textTertiary,
+    width: 48,
+  },
+  actions: { gap: 12 },
+  btnPrimary: {
+    backgroundColor: Colors.accent,
+    paddingVertical: 16,
+    borderRadius: Spacing.cardRadius,
+    alignItems: 'center',
+  },
+  btnPrimaryText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+  },
+  rowBtns: { flexDirection: 'row', gap: 12 },
+  btnSecondary: {
+    backgroundColor: Colors.surface,
+    paddingVertical: 14,
+    borderRadius: Spacing.cardRadius,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+  },
+  btnSecondaryText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: Colors.textSecondary,
+  },
+  pressed: { opacity: 0.75 },
+  jsonBlock: {
+    gap: 8,
+    backgroundColor: Colors.surface,
+    borderRadius: Spacing.cardRadius,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    padding: 16,
+  },
+  jsonText: {
+    fontSize: 11,
+    fontFamily: 'monospace',
+    color: Colors.textSecondary,
+    lineHeight: 18,
+  },
+});

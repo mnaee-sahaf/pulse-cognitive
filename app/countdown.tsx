@@ -12,6 +12,7 @@ import { useRouter } from 'expo-router';
 import { useGameStore } from '../store/gameStore';
 import { Colors, FontSize } from '../constants/theme';
 import { loadPlayerProfile } from '../db/playerProfile';
+import { loadEngineConfig } from '../db/engineConfig';
 
 export default function CountdownScreen() {
   const router = useRouter();
@@ -26,8 +27,8 @@ export default function CountdownScreen() {
   }));
 
   useEffect(() => {
-    loadPlayerProfile()
-      .then((profile) => startSession(profile))
+    Promise.all([loadPlayerProfile(), loadEngineConfig()])
+      .then(([profile, config]) => startSession(profile, config))
       .catch(() => startSession(null));
     animateTick(3);
   }, []);
