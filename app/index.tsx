@@ -19,6 +19,7 @@ export default function HomeScreen() {
   const [stats, setStats] = useState({ sessionCount: 0, bestRt: 0, avgScore: 0 });
   const [companion, setCompanion] = useState<CompanionState | null>(null);
   const animatedBackground = useAppSettings((s) => s.animatedBackground);
+  const backgroundIntensity = useAppSettings((s) => s.backgroundIntensity);
 
   useFocusEffect(
     useCallback(() => {
@@ -37,7 +38,7 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      {animatedBackground && <AnimatedBackground />}
+      {animatedBackground && <AnimatedBackground intensity={backgroundIntensity} />}
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.logo}>

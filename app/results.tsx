@@ -29,6 +29,7 @@ export default function ResultsScreen() {
   const router = useRouter();
   const { summary, engine, resetSession } = useGameStore();
   const animatedBackground = useAppSettings((s) => s.animatedBackground);
+  const backgroundIntensity = useAppSettings((s) => s.backgroundIntensity);
   const savedRef = useRef(false);
   const [companion, setCompanion] = useState<CompanionState | null>(null);
   const [xpGained, setXpGained] = useState(0);
@@ -72,7 +73,7 @@ export default function ResultsScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      {animatedBackground && <AnimatedBackground />}
+      {animatedBackground && <AnimatedBackground intensity={backgroundIntensity} />}
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}

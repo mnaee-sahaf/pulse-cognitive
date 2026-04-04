@@ -116,18 +116,34 @@ export default function SettingsScreen() {
   const [draft, setDraft] = useState<DraftConfig>(toDraft(ENGINE_CONFIG_DEFAULTS));
   const [saved, setSaved] = useState(false);
   const animatedBackground = useAppSettings((s) => s.animatedBackground);
+  const backgroundIntensity = useAppSettings((s) => s.backgroundIntensity);
   const setAnimatedBackground = useAppSettings((s) => s.setAnimatedBackground);
+  const setBackgroundIntensity = useAppSettings((s) => s.setBackgroundIntensity);
+  const [intensityDraft, setIntensityDraft] = useState(String(backgroundIntensity));
 
   useFocusEffect(
     useCallback(() => {
       loadEngineConfig().then((cfg) => setDraft(toDraft(cfg))).catch(console.error);
-      loadAppSettings().then((s) => setAnimatedBackground(s.animatedBackground)).catch(console.error);
+      loadAppSettings().then((s) => {
+        setAnimatedBackground(s.animatedBackground);
+        setBackgroundIntensity(s.backgroundIntensity);
+        setIntensityDraft(String(s.backgroundIntensity));
+      }).catch(console.error);
     }, [])
   );
 
   async function toggleAnimatedBackground(v: boolean) {
     setAnimatedBackground(v);
-    await saveAppSettings({ animatedBackground: v }).catch(console.error);
+    await saveAppSettings({ animatedBackground: v, backgroundIntensity }).catch(console.error);
+  }
+
+  async function commitIntensity(raw: string) {
+    const val = parseFloat(raw);
+    if (isNaN(val) || val <= 0) return;
+    const clamped = Math.min(5, Math.max(0.25, val));
+    setBackgroundIntensity(clamped);
+    setIntensityDraft(String(clamped));
+    await saveAppSettings({ animatedBackground, backgroundIntensity: clamped }).catch(console.error);
   }
 
   function updateField(key: keyof EngineConfig, value: string) {
@@ -191,11 +207,11 @@ export default function SettingsScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Visual</Text>
             <View style={styles.card}>
-              <View style={styles.fieldRow}>
+              <View style={[styles.fieldRow, styles.fieldDivider]}>
                 <View style={styles.fieldLeft}>
                   <Text style={styles.fieldLabel}>Animated Background</Text>
                   <Text style={styles.fieldHint}>
-                    Soft pastel blobs drifting behind home + results screens
+                    Pastel blobs drifting behind game grid, home + results
                   </Text>
                 </View>
                 <Switch
@@ -204,6 +220,26 @@ export default function SettingsScreen() {
                   trackColor={{ false: Colors.border, true: Colors.accent + '88' }}
                   thumbColor={animatedBackground ? Colors.accent : Colors.textTertiary}
                 />
+              </View>
+              <View style={styles.fieldRow}>
+                <View style={styles.fieldLeft}>
+                  <Text style={styles.fieldLabel}>Animation Speed</Text>
+                  <Text style={styles.fieldHint}>
+                    Speed multiplier — 1 = slow drift, 2 = 2× faster, 3 = chaotic. Range 0.25–5.
+                  </Text>
+                </View>
+                <View style={styles.fieldRight}>
+                  <TextInput
+                    style={styles.input}
+                    value={intensityDraft}
+                    onChangeText={setIntensityDraft}
+                    onBlur={() => commitIntensity(intensityDraft)}
+                    onSubmitEditing={() => commitIntensity(intensityDraft)}
+                    keyboardType="numeric"
+                    selectTextOnFocus
+                    returnKeyType="done"
+                  />
+                </View>
               </View>
             </View>
           </View>

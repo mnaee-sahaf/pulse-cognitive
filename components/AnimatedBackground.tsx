@@ -62,19 +62,21 @@ function makeBlobs(w: number, h: number): BlobConfig[] {
   ];
 }
 
-function Blob({ config }: { config: BlobConfig }) {
+function Blob({ config, intensity }: { config: BlobConfig; intensity: number }) {
   const x = useSharedValue(config.x0);
   const y = useSharedValue(config.y0);
 
   const ease = Easing.bezier(0.45, 0, 0.55, 1);
+  const speed = Math.max(0.25, intensity); // floor at 0.25× so blobs never stop
 
   useEffect(() => {
+    const dur = config.duration / speed;
     x.value = withDelay(
       config.delay,
       withRepeat(
         withSequence(
-          withTiming(config.x0 + config.dx, { duration: config.duration, easing: ease }),
-          withTiming(config.x0, { duration: config.duration, easing: ease })
+          withTiming(config.x0 + config.dx, { duration: dur, easing: ease }),
+          withTiming(config.x0, { duration: dur, easing: ease })
         ),
         -1
       )
@@ -84,13 +86,13 @@ function Blob({ config }: { config: BlobConfig }) {
       config.delay,
       withRepeat(
         withSequence(
-          withTiming(config.y0 + config.dy, { duration: config.duration + 4000, easing: ease }),
-          withTiming(config.y0, { duration: config.duration + 4000, easing: ease })
+          withTiming(config.y0 + config.dy, { duration: dur + 4000 / speed, easing: ease }),
+          withTiming(config.y0, { duration: dur + 4000 / speed, easing: ease })
         ),
         -1
       )
     );
-  }, []);
+  }, [intensity]);
 
   const style = useAnimatedStyle(() => ({
     transform: [{ translateX: x.value }, { translateY: y.value }],
@@ -105,7 +107,7 @@ function Blob({ config }: { config: BlobConfig }) {
           height: config.size,
           borderRadius: config.size / 2,
           backgroundColor: config.color,
-          opacity: config.opacity,
+          opacity: Math.min(0.55, config.opacity * (0.7 + intensity * 0.3)),
         },
         style,
       ]}
@@ -113,14 +115,14 @@ function Blob({ config }: { config: BlobConfig }) {
   );
 }
 
-export function AnimatedBackground() {
+export function AnimatedBackground({ intensity = 1 }: { intensity?: number }) {
   const { width, height } = useWindowDimensions();
   const blobs = makeBlobs(width, height);
 
   return (
     <>
       {blobs.map((b, i) => (
-        <Blob key={i} config={b} />
+        <Blob key={i} config={b} intensity={intensity} />
       ))}
     </>
   );

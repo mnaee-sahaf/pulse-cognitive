@@ -31,6 +31,7 @@ export default function GameScreen() {
   } = state;
 
   const animatedBackground = useAppSettings((s) => s.animatedBackground);
+  const backgroundIntensity = useAppSettings((s) => s.backgroundIntensity);
   const watchEndTimeRef = useRef(0);
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -97,7 +98,7 @@ export default function GameScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      {animatedBackground && <AnimatedBackground />}
+      {animatedBackground && <AnimatedBackground intensity={backgroundIntensity} />}
       <View style={styles.container}>
         {/* HUD */}
         <View style={styles.hud}>

@@ -10,6 +10,11 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
 }
 
 async function migrate(db: SQLite.SQLiteDatabase) {
+  // Add columns introduced after initial schema — safe to run on every startup
+  await db.execAsync(
+    `ALTER TABLE app_settings ADD COLUMN background_intensity REAL NOT NULL DEFAULT 1.0`
+  ).catch(() => {}); // column already exists on new installs — ignore
+
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
 
@@ -57,7 +62,8 @@ async function migrate(db: SQLite.SQLiteDatabase) {
 
     CREATE TABLE IF NOT EXISTS app_settings (
       id INTEGER PRIMARY KEY CHECK (id = 1),
-      animated_background INTEGER NOT NULL DEFAULT 0
+      animated_background INTEGER NOT NULL DEFAULT 0,
+      background_intensity REAL NOT NULL DEFAULT 1.0
     );
   `);
 }

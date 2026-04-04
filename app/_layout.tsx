@@ -8,10 +8,14 @@ import { useAppSettings } from '../store/appSettingsStore';
 
 export default function RootLayout() {
   const setAnimatedBackground = useAppSettings((s) => s.setAnimatedBackground);
+  const setBackgroundIntensity = useAppSettings((s) => s.setBackgroundIntensity);
 
   useEffect(() => {
     loadAppSettings()
-      .then((s) => setAnimatedBackground(s.animatedBackground))
+      .then((s) => {
+        setAnimatedBackground(s.animatedBackground);
+        setBackgroundIntensity(s.backgroundIntensity);
+      })
       .catch(console.error);
   }, []);
 
