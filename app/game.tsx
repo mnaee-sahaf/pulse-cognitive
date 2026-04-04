@@ -162,10 +162,11 @@ export default function GameScreen() {
       if (isValidTarget) {
         emberHitThisFlashRef.current = true; // lock out double-taps on same flash
         handleWatchTap(cellIndex, rt);
-      } else {
-        // Still let the store handle poison taps regardless of timing
+      } else if (cellIndex === round.poisonCell) {
+        // Route poison taps to the store regardless of timing so loseLife fires
         handleWatchTap(cellIndex, rt);
       }
+      // Invalid non-poison taps are silently ignored
     } else {
       handleTap(cellIndex, time);
     }
@@ -276,6 +277,7 @@ export default function GameScreen() {
             disabled={!isRecalling && !isEmberWatch}
             themeColor={modeColor}
             tileShape={tileShape}
+            hideWhenIdle={gameMode === 'ember'}
           />
         </View>
 
