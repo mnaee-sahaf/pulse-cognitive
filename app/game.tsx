@@ -2,16 +2,20 @@ import React, { useEffect, useRef, useCallback, useState } from 'react';
 import {
   View,
   Text,
+  Pressable,
+  Alert,
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useGameStore } from '../store/gameStore';
 import { Grid } from '../components/Grid';
+import type { TileShape } from '../components/Cell';
 import { Colors, FontSize, Spacing } from '../constants/theme';
 import * as Haptics from 'expo-haptics';
 import { AnimatedBackground } from '../components/AnimatedBackground';
 import { useAppSettings } from '../store/appSettingsStore';
+import { COMPANIONS } from '../db/companion';
 
 export default function GameScreen() {
   const router = useRouter();
@@ -34,6 +38,7 @@ export default function GameScreen() {
     handleWatchTap,
     finishEmberSequence,
     advanceRound,
+    resetSession,
   } = state;
 
   const animatedBackground = useAppSettings((s) => s.animatedBackground);
@@ -109,7 +114,23 @@ export default function GameScreen() {
     return map;
   }, [tapResults]);
 
-  if (!round) return null;
+  const handleQuit = () => {
+    Alert.alert(
+      'Abandon Session',
+      'Your progress this session will be lost.',
+      [
+        { text: 'Keep Going', style: 'cancel' },
+        {
+          text: 'Abandon',
+          style: 'destructive',
+          onPress: () => {
+            resetSession();
+            router.replace('/');
+          },
+        },
+      ]
+    );
+  };
 
   const isRecalling = phase === 'recall';
   const isEmberWatch = gameMode === 'ember' && phase === 'watch';
@@ -121,6 +142,8 @@ export default function GameScreen() {
       handleTap(cellIndex, time);
     }
   }, [isEmberWatch, handleWatchTap, handleTap]);
+
+  if (!round) return null;
   const phaseLabel =
     phase === 'feedback' ? 'GOOD' :
     gameMode === 'ember' ? 'INTERCEPT' :
@@ -128,10 +151,15 @@ export default function GameScreen() {
     phase === 'watch' ? 'WATCH' :
     phase === 'recall' ? 'RECALL' : '';
 
-  const modeColor =
-    gameMode === 'ember' ? '#FF6B35' :
-    gameMode === 'tide'  ? '#2D9CDB' :
-    Colors.accent;
+  // Always derived from the companion definition so color + shape stay in sync
+  const modeColor = COMPANIONS[gameMode].stages[0].primaryColor;
+
+  const tileShape: TileShape =
+    gameMode === 'arc'   ? 'hexagon' :
+    gameMode === 'tide'  ? 'circle' :
+    // TODO: refactor Ember game mechanics after research — real-time intercept
+    // feel, scoring, and tile shape all need revisiting before this is final.
+    'triangle';
 
   const mutationLabel = round.mutation !== 'none' ? round.mutation.toUpperCase() : null;
 
@@ -144,6 +172,13 @@ export default function GameScreen() {
           <View style={styles.hudLeft}>
             <Text style={styles.score}>{totalScore.toLocaleString()}</Text>
             <Text style={styles.hudLabel}>SCORE</Text>
+            <Pressable
+              onPress={handleQuit}
+              style={({ pressed }) => [styles.quitBtn, pressed && { opacity: 0.5 }]}
+              hitSlop={12}
+            >
+              <Text style={styles.quitText}>✕ QUIT</Text>
+            </Pressable>
           </View>
           <View style={styles.hudCenter}>
             {/* Mode badge */}
@@ -212,6 +247,7 @@ export default function GameScreen() {
             onTap={onGridTap}
             disabled={!isRecalling && !isEmberWatch}
             themeColor={modeColor}
+            tileShape={tileShape}
           />
         </View>
 
@@ -251,7 +287,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
   },
-  hudLeft: { alignItems: 'flex-start', minWidth: 64 },
+  hudLeft: { alignItems: 'flex-start', minWidth: 64, gap: 2 },
   hudCenter: { alignItems: 'center', gap: 6 },
   hudRight: { alignItems: 'flex-end', minWidth: 64 },
   score: {
@@ -273,6 +309,15 @@ const styles = StyleSheet.create({
     color: Colors.textTertiary,
     letterSpacing: 1.2,
     textTransform: 'uppercase',
+  },
+  quitBtn: {
+    marginTop: 6,
+  },
+  quitText: {
+    fontSize: FontSize.label,
+    fontWeight: '600',
+    color: Colors.textTertiary,
+    letterSpacing: 1,
   },
   modeBadge: {
     borderRadius: 6,

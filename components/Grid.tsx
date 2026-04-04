@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, useWindowDimensions } from 'react-native';
-import { Cell } from './Cell';
+import { Cell, type TileShape } from './Cell';
 import { Spacing } from '../constants/theme';
 import type { GridSize } from '../engine/sequenceGenerator';
 
@@ -12,6 +12,7 @@ interface GridProps {
   onTap: (cellIndex: number, time: number) => void;
   disabled: boolean;
   themeColor: string;
+  tileShape: TileShape;
 }
 
 export function Grid({
@@ -22,6 +23,7 @@ export function Grid({
   onTap,
   disabled,
   themeColor,
+  tileShape,
 }: GridProps) {
   const { width } = useWindowDimensions();
   const availableWidth = Math.min(width, Spacing.maxWidth) - Spacing.pagePadding * 2;
@@ -46,6 +48,7 @@ export function Grid({
                 onTap={onTap}
                 disabled={disabled}
                 themeColor={themeColor}
+                tileShape={tileShape}
               />
             );
           })}

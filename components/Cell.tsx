@@ -1,30 +1,60 @@
-import React, { useEffect } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import React, { useEffect, useMemo } from 'react';
+import { Pressable } from 'react-native';
+import Svg, { Polygon, Circle } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { useAppSettings } from '../store/appSettingsStore';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
+  useAnimatedProps,
   withTiming,
   withSequence,
   withSpring,
   Easing,
-  runOnJS,
 } from 'react-native-reanimated';
-import { Colors, Spacing } from '../constants/theme';
+import { Colors } from '../constants/theme';
+
+export type TileShape = 'circle' | 'triangle' | 'hexagon';
+
+const AnimatedPolygon = Animated.createAnimatedComponent(Polygon);
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+// Pointy-top hexagon vertices, inset within size×size viewBox
+function hexPoints(size: number, inset = 0.86): string {
+  const cx = size / 2;
+  const cy = size / 2;
+  const R = (size / 2) * inset;
+  return Array.from({ length: 6 }, (_, i) => {
+    const angle = -Math.PI / 2 + (Math.PI / 3) * i;
+    return `${cx + R * Math.cos(angle)},${cy + R * Math.sin(angle)}`;
+  }).join(' ');
+}
+
+// TODO: Ember tile shape needs to be reconsidered alongside Ember game mechanics
+// refactor — triangle may not be the right choice once intercept flow is finalised.
+// Equilateral triangle pointing up, centered in size×size viewBox
+function triPoints(size: number, inset = 0.86): string {
+  const margin = (size * (1 - inset)) / 2;
+  const s = size - 2 * margin;
+  const h = s * (Math.sqrt(3) / 2);
+  const cx = size / 2;
+  const topY = (size - h) / 2;
+  const botY = topY + h;
+  return `${cx},${topY} ${size - margin},${botY} ${margin},${botY}`;
+}
 
 interface CellProps {
   index: number;
-  size: number; // pixel size of the cell
+  size: number;
   isIlluminated: boolean;
   isPoison: boolean;
   tapState: 'idle' | 'correct' | 'wrong';
   onTap: (index: number, time: number) => void;
   disabled: boolean;
   themeColor: string;
+  tileShape: TileShape;
 }
-
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export function Cell({
   index,
@@ -35,84 +65,109 @@ export function Cell({
   onTap,
   disabled,
   themeColor,
+  tileShape,
 }: CellProps) {
   const greenTileFeedback = useAppSettings((s) => s.greenTileFeedback);
   const hapticFeedback = useAppSettings((s) => s.hapticFeedback);
 
-  const bgColor = useSharedValue<string>(Colors.surface);
+  const shapePoints = useMemo(() => {
+    if (tileShape === 'hexagon') return hexPoints(size);
+    if (tileShape === 'triangle') return triPoints(size);
+    return '';
+  }, [tileShape, size]);
+
+  const idleColor = themeColor + '30';
+  const poisonColor = '#FFAAAA';
+
+  const fillColor = useSharedValue(idleColor);
   const scale = useSharedValue(1);
   const translateX = useSharedValue(0);
-  const elevation = useSharedValue(0);
+  const glowOpacity = useSharedValue(0);
 
-  // Illumination effect
+  // Illumination
   useEffect(() => {
     if (isIlluminated) {
-      bgColor.value = withTiming(themeColor, { duration: 150, easing: Easing.out(Easing.ease) });
-      scale.value = withTiming(1.03, { duration: 150 });
-      elevation.value = withTiming(6, { duration: 150 });
+      fillColor.value = withTiming(themeColor, { duration: 130, easing: Easing.out(Easing.ease) });
+      scale.value = withTiming(1.06, { duration: 130 });
+      glowOpacity.value = withTiming(0.3, { duration: 130 });
     } else {
-      bgColor.value = withTiming(isPoison ? '#FFE5E5' : Colors.surface, { duration: 150 });
+      fillColor.value = withTiming(isPoison ? poisonColor : idleColor, { duration: 180 });
       scale.value = withTiming(1.0, { duration: 150 });
-      elevation.value = withTiming(0, { duration: 150 });
+      glowOpacity.value = withTiming(0, { duration: 180 });
     }
   }, [isIlluminated, isPoison, themeColor]);
 
-  // Tap feedback effects
+  // Tap feedback
   useEffect(() => {
     if (tapState === 'correct') {
       if (greenTileFeedback) {
-        bgColor.value = withSequence(
+        fillColor.value = withSequence(
           withTiming(Colors.success, { duration: 80 }),
-          withTiming(Colors.surface, { duration: 270 })
+          withTiming(idleColor, { duration: 280 })
         );
       }
       scale.value = withSequence(
-        withSpring(1.1, { damping: 10, stiffness: 300 }),
-        withSpring(1.0, { damping: 15, stiffness: 200 })
+        withSpring(1.13, { damping: 10, stiffness: 300 }),
+        withSpring(1.0, { damping: 14, stiffness: 200 })
       );
     } else if (tapState === 'wrong') {
-      bgColor.value = withSequence(
+      fillColor.value = withSequence(
         withTiming(Colors.danger, { duration: 80 }),
-        withTiming(Colors.surface, { duration: 320 })
+        withTiming(idleColor, { duration: 320 })
       );
-      // Shake: oscillate ±4px
       translateX.value = withSequence(
-        withTiming(-4, { duration: 50 }),
-        withTiming(4, { duration: 50 }),
-        withTiming(-4, { duration: 50 }),
-        withTiming(4, { duration: 50 }),
-        withTiming(0, { duration: 100 })
+        withTiming(-5, { duration: 45 }),
+        withTiming(5, { duration: 45 }),
+        withTiming(-5, { duration: 45 }),
+        withTiming(5, { duration: 45 }),
+        withTiming(0, { duration: 90 })
       );
     }
   }, [tapState]);
 
-  const animStyle = useAnimatedStyle(() => ({
-    backgroundColor: bgColor.value,
+  // Wrapper handles scale, shake, and glow shadow
+  const wrapperStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }, { translateX: translateX.value }],
-    shadowOpacity: elevation.value > 0 ? 0.18 : 0,
-    shadowRadius: elevation.value,
-    elevation: elevation.value,
+    shadowOpacity: glowOpacity.value,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: glowOpacity.value > 0 ? 6 : 0,
   }));
+
+  // SVG fill via animatedProps (the only clean way to drive SVG color)
+  const shapeFill = useAnimatedProps(() => ({
+    fill: fillColor.value,
+  }));
+
+  const handlePress = () => {
+    if (!disabled) {
+      if (hapticFeedback) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      onTap(index, performance.now());
+    }
+  };
 
   return (
     <AnimatedPressable
-      style={[styles.cell, { width: size, height: size, shadowColor: themeColor }, animStyle]}
-      onPress={() => {
-        if (!disabled) {
-          if (hapticFeedback) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          onTap(index, performance.now());
-        }
-      }}
+      style={[{ width: size, height: size, shadowColor: themeColor }, wrapperStyle]}
+      onPress={handlePress}
       disabled={disabled}
-    />
+    >
+      <Svg width={size} height={size}>
+        {tileShape === 'circle' && (
+          <AnimatedCircle
+            cx={size / 2}
+            cy={size / 2}
+            r={(size / 2) * 0.86}
+            animatedProps={shapeFill}
+          />
+        )}
+        {(tileShape === 'hexagon' || tileShape === 'triangle') && (
+          <AnimatedPolygon
+            points={shapePoints}
+            animatedProps={shapeFill}
+          />
+        )}
+      </Svg>
+    </AnimatedPressable>
   );
 }
-
-const styles = StyleSheet.create({
-  cell: {
-    borderRadius: Spacing.cellRadius,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    shadowOffset: { width: 0, height: 2 },
-  },
-});
