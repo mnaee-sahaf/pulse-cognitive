@@ -21,6 +21,7 @@ interface CellProps {
   tapState: 'idle' | 'correct' | 'wrong';
   onTap: (index: number, time: number) => void;
   disabled: boolean;
+  themeColor: string;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -33,6 +34,7 @@ export function Cell({
   tapState,
   onTap,
   disabled,
+  themeColor,
 }: CellProps) {
   const greenTileFeedback = useAppSettings((s) => s.greenTileFeedback);
   const hapticFeedback = useAppSettings((s) => s.hapticFeedback);
@@ -45,7 +47,7 @@ export function Cell({
   // Illumination effect
   useEffect(() => {
     if (isIlluminated) {
-      bgColor.value = withTiming(Colors.accent, { duration: 150, easing: Easing.out(Easing.ease) });
+      bgColor.value = withTiming(themeColor, { duration: 150, easing: Easing.out(Easing.ease) });
       scale.value = withTiming(1.03, { duration: 150 });
       elevation.value = withTiming(6, { duration: 150 });
     } else {
@@ -53,7 +55,7 @@ export function Cell({
       scale.value = withTiming(1.0, { duration: 150 });
       elevation.value = withTiming(0, { duration: 150 });
     }
-  }, [isIlluminated, isPoison]);
+  }, [isIlluminated, isPoison, themeColor]);
 
   // Tap feedback effects
   useEffect(() => {
@@ -94,7 +96,7 @@ export function Cell({
 
   return (
     <AnimatedPressable
-      style={[styles.cell, { width: size, height: size }, animStyle]}
+      style={[styles.cell, { width: size, height: size, shadowColor: themeColor }, animStyle]}
       onPress={() => {
         if (!disabled) {
           if (hapticFeedback) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -111,7 +113,6 @@ const styles = StyleSheet.create({
     borderRadius: Spacing.cellRadius,
     borderWidth: 1.5,
     borderColor: Colors.border,
-    shadowColor: Colors.accent,
     shadowOffset: { width: 0, height: 2 },
   },
 });

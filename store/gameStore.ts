@@ -107,12 +107,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (state.lives > 1) {
       const rebuiltState: GameState = {
         ...state,
+        roundCount: state.roundCount + 1,  // ensure round.round changes so watch effect retriggers
         engine: { ...state.engine, levers: { ...state.engine.levers, sequenceGrowth: 0 } },
         emberHits: 0,
       };
       const newRound = buildRound(rebuiltState);
       set({
         lives: state.lives - 1,
+        roundCount: rebuiltState.roundCount,
         recallProgress: [],
         tapResults: [],
         phase: 'watch',

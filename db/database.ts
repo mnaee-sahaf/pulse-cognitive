@@ -17,6 +17,33 @@ async function migrate(db: SQLite.SQLiteDatabase) {
   await db.execAsync(`ALTER TABLE app_settings ADD COLUMN green_tile_feedback INTEGER NOT NULL DEFAULT 1`).catch(() => {});
   await db.execAsync(`ALTER TABLE app_settings ADD COLUMN haptic_feedback INTEGER NOT NULL DEFAULT 1`).catch(() => {});
 
+  // Migrate existing single-companion row into companion_levels (idempotent)
+  const oldCompanion = await db.getFirstAsync<{ companion_id: string; level: number; xp: number }>(
+    `SELECT companion_id, level, xp FROM companion WHERE id = 1`
+  ).catch(() => null);
+  if (oldCompanion) {
+    await db.execAsync(`CREATE TABLE IF NOT EXISTS companion_levels (
+      companion_id TEXT PRIMARY KEY,
+      level INTEGER NOT NULL DEFAULT 5,
+      xp INTEGER NOT NULL DEFAULT 0,
+      is_active INTEGER NOT NULL DEFAULT 0
+    )`).catch(() => {});
+    // Only seed if companion_levels is empty
+    const existingCount = await db.getFirstAsync<{ c: number }>(`SELECT COUNT(*) as c FROM companion_levels`).catch(() => null);
+    if (!existingCount || existingCount.c === 0) {
+      const companionIds = ['arc', 'tide', 'ember'];
+      for (const id of companionIds) {
+        const isActive = id === oldCompanion.companion_id ? 1 : 0;
+        const level = id === oldCompanion.companion_id ? oldCompanion.level : 5;
+        const xp = id === oldCompanion.companion_id ? oldCompanion.xp : 0;
+        await db.runAsync(
+          `INSERT OR IGNORE INTO companion_levels (companion_id, level, xp, is_active) VALUES (?, ?, ?, ?)`,
+          [id, level, xp, isActive]
+        );
+      }
+    }
+  }
+
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
 
@@ -25,6 +52,13 @@ async function migrate(db: SQLite.SQLiteDatabase) {
       companion_id TEXT NOT NULL,
       level INTEGER NOT NULL DEFAULT 5,
       xp INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS companion_levels (
+      companion_id TEXT PRIMARY KEY,
+      level INTEGER NOT NULL DEFAULT 5,
+      xp INTEGER NOT NULL DEFAULT 0,
+      is_active INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS sessions (

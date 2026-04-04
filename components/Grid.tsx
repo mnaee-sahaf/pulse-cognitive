@@ -11,6 +11,7 @@ interface GridProps {
   tapStates: Record<number, 'idle' | 'correct' | 'wrong'>;
   onTap: (cellIndex: number, time: number) => void;
   disabled: boolean;
+  themeColor: string;
 }
 
 export function Grid({
@@ -20,6 +21,7 @@ export function Grid({
   tapStates,
   onTap,
   disabled,
+  themeColor,
 }: GridProps) {
   const { width } = useWindowDimensions();
   const availableWidth = Math.min(width, Spacing.maxWidth) - Spacing.pagePadding * 2;
@@ -43,6 +45,7 @@ export function Grid({
                 tapState={tapStates[index] ?? 'idle'}
                 onTap={onTap}
                 disabled={disabled}
+                themeColor={themeColor}
               />
             );
           })}

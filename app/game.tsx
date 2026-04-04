@@ -211,6 +211,7 @@ export default function GameScreen() {
             tapStates={tapStates()}
             onTap={onGridTap}
             disabled={!isRecalling && !isEmberWatch}
+            themeColor={modeColor}
           />
         </View>
 

@@ -122,7 +122,7 @@ function CompanionShape({
   primaryColor,
   secondaryColor,
 }: {
-  shape: 'circle' | 'triangle' | 'diamond';
+  shape: 'circle' | 'triangle' | 'diamond' | 'hexagon';
   size: number;
   primaryColor: string;
   secondaryColor: string;
@@ -188,6 +188,31 @@ function CompanionShape({
             bottom: size * 0.18,
           }}
         />
+      </View>
+    );
+  }
+
+  // Hexagon (pointy-top) built from two border-triangles + a rectangle
+  if (shape === 'hexagon') {
+    const w = size * 0.866; // flat-side width = side * sqrt(3), side = size/2
+    const capH = size * 0.25; // top/bottom triangle cap height
+    const midH = size * 0.5;  // middle rectangle height
+    const innerW = w * 0.38;
+    const innerCapH = capH * 0.38;
+    const innerMidH = midH * 0.38;
+    return (
+      <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ alignItems: 'center' }}>
+          <View style={{ width: 0, height: 0, borderLeftWidth: w / 2, borderRightWidth: w / 2, borderBottomWidth: capH, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: primaryColor }} />
+          <View style={{ width: w, height: midH, backgroundColor: primaryColor }} />
+          <View style={{ width: 0, height: 0, borderLeftWidth: w / 2, borderRightWidth: w / 2, borderTopWidth: capH, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: primaryColor }} />
+        </View>
+        {/* Inner accent hexagon */}
+        <View style={{ position: 'absolute', alignItems: 'center' }}>
+          <View style={{ width: 0, height: 0, borderLeftWidth: innerW / 2, borderRightWidth: innerW / 2, borderBottomWidth: innerCapH, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: secondaryColor }} />
+          <View style={{ width: innerW, height: innerMidH, backgroundColor: secondaryColor }} />
+          <View style={{ width: 0, height: 0, borderLeftWidth: innerW / 2, borderRightWidth: innerW / 2, borderTopWidth: innerCapH, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: secondaryColor }} />
+        </View>
       </View>
     );
   }

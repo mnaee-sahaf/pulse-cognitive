@@ -9,8 +9,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Colors, FontSize, Spacing } from '../constants/theme';
 import { getLifetimeStats } from '../db/sessions';
-import { loadCompanion, type CompanionState } from '../db/companion';
+import {
+  loadCompanion,
+  getAllCompanions,
+  switchCompanion,
+  type CompanionState,
+  type CompanionId,
+} from '../db/companion';
 import { Companion } from '../components/Companion';
+import { CompanionSwitcher } from '../components/CompanionSwitcher';
 import { AnimatedBackground } from '../components/AnimatedBackground';
 import { useAppSettings } from '../store/appSettingsStore';
 
@@ -18,21 +25,30 @@ export default function HomeScreen() {
   const router = useRouter();
   const [stats, setStats] = useState({ sessionCount: 0, bestRt: 0, avgScore: 0 });
   const [companion, setCompanion] = useState<CompanionState | null>(null);
+  const [allCompanions, setAllCompanions] = useState<CompanionState[]>([]);
+  const [switcherVisible, setSwitcherVisible] = useState(false);
   const animatedBackground = useAppSettings((s) => s.animatedBackground);
   const backgroundIntensity = useAppSettings((s) => s.backgroundIntensity);
 
-  useFocusEffect(
-    useCallback(() => {
-      getLifetimeStats().then(setStats).catch(console.error);
-      loadCompanion().then((c) => {
-        if (!c) {
-          router.replace('/choose-companion');
-        } else {
-          setCompanion(c);
-        }
-      }).catch(console.error);
-    }, [])
-  );
+  const loadData = useCallback(() => {
+    getLifetimeStats().then(setStats).catch(console.error);
+    loadCompanion().then((c) => {
+      if (!c) {
+        router.replace('/choose-companion');
+      } else {
+        setCompanion(c);
+      }
+    }).catch(console.error);
+    getAllCompanions().then(setAllCompanions).catch(console.error);
+  }, []);
+
+  useFocusEffect(loadData);
+
+  const handleSwitchCompanion = useCallback(async (id: CompanionId) => {
+    await switchCompanion(id);
+    setSwitcherVisible(false);
+    loadData();
+  }, [loadData]);
 
   const hasStats = stats.sessionCount > 0;
 
@@ -48,7 +64,13 @@ export default function HomeScreen() {
         </View>
 
         {companion && (
-          <Companion state={companion} size={72} showInfo={true} />
+          <Pressable
+            onPress={() => setSwitcherVisible(true)}
+            style={({ pressed }) => [styles.companionTap, pressed && { opacity: 0.8 }]}
+          >
+            <Companion state={companion} size={72} showInfo={true} />
+            <Text style={styles.switchHint}>TAP TO SWITCH MODE</Text>
+          </Pressable>
         )}
 
         <View style={styles.metricsRow}>
@@ -82,6 +104,13 @@ export default function HomeScreen() {
           <Text style={styles.hint}>60 seconds · 4 cognitive metrics</Text>
         </View>
       </View>
+
+      <CompanionSwitcher
+        visible={switcherVisible}
+        companions={allCompanions}
+        onSelect={handleSwitchCompanion}
+        onClose={() => setSwitcherVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -117,6 +146,16 @@ const styles = StyleSheet.create({
   tagline: {
     fontSize: FontSize.label,
     fontWeight: '500',
+    color: Colors.textTertiary,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  companionTap: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  switchHint: {
+    fontSize: FontSize.label - 1,
     color: Colors.textTertiary,
     letterSpacing: 1.5,
     textTransform: 'uppercase',
