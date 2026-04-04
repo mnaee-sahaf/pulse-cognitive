@@ -137,7 +137,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       ...(updates as Partial<GameStore>),
       phase: 'watch',
       round: nextRound,
-      roundCount: merged.roundCount + 1,
+      roundCount: merged.roundCount,
       currentFlashIndex: -1,
       emberHits: 0,
     });
