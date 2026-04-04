@@ -152,7 +152,9 @@ export function Cell({
       onPress={handlePress}
       disabled={disabled}
     >
-      <Svg width={size} height={size}>
+      {/* pointerEvents="none" prevents the SVG subtree from consuming touches
+          so they always reach the AnimatedPressable wrapper */}
+      <Svg width={size} height={size} pointerEvents="none">
         {tileShape === 'circle' && (
           <AnimatedCircle
             cx={size / 2}

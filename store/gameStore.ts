@@ -74,15 +74,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       get().loseLife();
       return;
     }
-    if (cellIndex === state.currentFlashIndex) {
-      const hit: TapResult = { cellIndex, rt, correct: true, isPoisonTap: false };
-      set({
-        tapResults: [...state.tapResults, hit],
-        sessionRts: [...state.sessionRts, rt],
-        emberHits: state.emberHits + 1,
-      });
-    }
-    // Wrong non-poison cell during ember watch = ignored
+    // Hit validation (correct cell, within grace window) is done in game.tsx
+    // before this is called — just record the hit here.
+    const hit: TapResult = { cellIndex, rt, correct: true, isPoisonTap: false };
+    set({
+      tapResults: [...state.tapResults, hit],
+      sessionRts: [...state.sessionRts, rt],
+      emberHits: state.emberHits + 1,
+    });
   },
 
   finishEmberSequence: () => {

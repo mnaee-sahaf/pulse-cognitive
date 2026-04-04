@@ -47,7 +47,17 @@ export default function GameScreen() {
   const watchEndTimeRef = useRef(0);
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevLivesRef = useRef(lives);
-  const flashStartRef = useRef(0); // Ember: when current cell started illuminating
+  const flashStartRef = useRef(0);
+
+  // Ember: track which cell is the active intercept target and for how long.
+  // Using refs (not state) so checks in onGridTap are always current without
+  // triggering re-renders.
+  // TODO: Ember needs a full redesign — falling Tetris-style items with
+  // increasing speed/complexity that the user intercepts before they land.
+  const EMBER_GRACE_MS = 350; // ms after flash ends where tap still counts
+  const emberTargetRef = useRef(-1);        // cell index currently valid to tap
+  const emberTargetExpiryRef = useRef(0);   // absolute time when target expires
+  const emberHitThisFlashRef = useRef(false); // prevent double-counting same flash
 
   // Buzz when a life is lost
   useEffect(() => {
@@ -73,8 +83,14 @@ export default function GameScreen() {
         }
         return;
       }
-      setFlashIndex(round.displaySequence[i]);
+      const cellIndex = round.displaySequence[i];
+      setFlashIndex(cellIndex);
       flashStartRef.current = performance.now();
+      if (gameMode === 'ember') {
+        emberTargetRef.current = cellIndex;
+        emberTargetExpiryRef.current = performance.now() + round.flashDuration + EMBER_GRACE_MS;
+        emberHitThisFlashRef.current = false;
+      }
       i++;
       flashTimerRef.current = setTimeout(() => {
         setFlashIndex(-1);
@@ -137,7 +153,19 @@ export default function GameScreen() {
 
   const onGridTap = useCallback((cellIndex: number, time: number) => {
     if (isEmberWatch) {
-      handleWatchTap(cellIndex, time - flashStartRef.current);
+      const rt = time - flashStartRef.current;
+      const isValidTarget =
+        cellIndex === emberTargetRef.current &&
+        time <= emberTargetExpiryRef.current &&
+        !emberHitThisFlashRef.current;
+
+      if (isValidTarget) {
+        emberHitThisFlashRef.current = true; // lock out double-taps on same flash
+        handleWatchTap(cellIndex, rt);
+      } else {
+        // Still let the store handle poison taps regardless of timing
+        handleWatchTap(cellIndex, rt);
+      }
     } else {
       handleTap(cellIndex, time);
     }
