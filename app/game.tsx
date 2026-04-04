@@ -162,7 +162,7 @@ export default function GameScreen() {
       if (isValidTarget) {
         emberHitThisFlashRef.current = true; // lock out double-taps on same flash
         handleWatchTap(cellIndex, rt);
-      } else if (cellIndex === round.poisonCell) {
+      } else if (round && cellIndex === round.poisonCell) {
         // Route poison taps to the store regardless of timing so loseLife fires
         handleWatchTap(cellIndex, rt);
       }
