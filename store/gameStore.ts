@@ -5,6 +5,7 @@ import {
   processTap,
   completeRound,
   buildSummary,
+  applyFailedRound,
   type GameState,
   type GameMode,
   type TapResult,
@@ -104,14 +105,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
   loseLife: () => {
     const state = get();
     if (state.lives > 1) {
+      // Record the failed round so the engine learns from it (mutationSurvived: false,
+      // reduced accuracy) before building the recovery round.
+      const { engine: failedEngine } = applyFailedRound(state);
+      // Suppress sequence growth for this recovery round only.
+      const recoveryEngine = {
+        ...failedEngine,
+        levers: { ...failedEngine.levers, sequenceGrowth: 0 as const },
+      };
       const rebuiltState: GameState = {
         ...state,
         roundCount: state.roundCount + 1,  // ensure round.round changes so watch effect retriggers
-        engine: { ...state.engine, levers: { ...state.engine.levers, sequenceGrowth: 0 } },
+        engine: recoveryEngine,
         emberHits: 0,
       };
       const newRound = buildRound(rebuiltState);
       set({
+        engine: failedEngine,  // persist adaptive levers without the sequenceGrowth: 0 override
         lives: state.lives - 1,
         roundCount: rebuiltState.roundCount,
         recallProgress: [],

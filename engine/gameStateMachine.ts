@@ -266,6 +266,30 @@ export function completeRound(state: GameState): Partial<GameState> {
   };
 }
 
+/**
+ * Builds a failed RoundPerformance and updates the engine for a life-lost round.
+ * Ensures mutationSurvived === false reaches updateEngine when a mutation was active,
+ * so mutation-rate dampening and consecutiveFailedMutations tracking work correctly.
+ */
+export function applyFailedRound(state: GameState): { engine: EngineState } {
+  if (!state.round) return { engine: state.engine };
+  const roundCorrect = state.tapResults.filter((t) => t.correct).length;
+  const roundTotal = state.round.expectedSequence.length;
+  const roundAvgRt =
+    state.tapResults.length > 0
+      ? state.tapResults.reduce((s, t) => s + t.rt, 0) / state.tapResults.length
+      : 500;
+  const mutationSurvived = state.round.mutation !== 'none' ? false : null;
+
+  const roundPerf: RoundPerformance = {
+    correct: roundCorrect,
+    total: roundTotal,
+    avgRt: roundAvgRt,
+    mutationSurvived,
+  };
+  return { engine: updateEngine(state.engine, roundPerf, state.roundCount) };
+}
+
 export function buildSummary(state: GameState): SessionSummary {
   const allRts = state.sessionRts;
   const avgRt = allRts.length > 0
