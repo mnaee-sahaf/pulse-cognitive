@@ -1,9 +1,9 @@
 import type { GridSize, Mutation } from './sequenceGenerator';
 
 export interface LeverSettings {
-  sequenceGrowth: 1 | 2 | 3;    // elements added per round
-  tempoRamp: number;             // ms reduction per round (negative: faster)
-  mutationRate: number;          // 0.0 – 0.60 chance of mutation this round
+  sequenceGrowth: 0 | 1 | 2 | 3; // elements added per round (0 = hold at current length)
+  tempoRamp: number;              // ms delta applied to currentFlashDuration each round (negative: faster, positive: slower)
+  mutationRate: number;           // 0.0 – 0.60 chance of mutation this round
   gridSize: GridSize;
 }
 
@@ -26,12 +26,13 @@ export interface EngineState {
   roundHistory: RoundPerformance[];
   consecutiveMutationSurvives: number;
   consecutiveFailedMutations: number;
-  intensity: number; // 0.0–1.0 snapshot of how hard the engine is pushing
+  intensity: number;             // 0.0–1.0 snapshot of how hard the engine is pushing
+  currentFlashDuration: number;  // ms — accumulates tempo deltas each round
 }
 
 const DEFAULT_LEVERS: LeverSettings = {
   sequenceGrowth: 1,
-  tempoRamp: -20,
+  tempoRamp: -10,
   mutationRate: 0,
   gridSize: 3,
 };
@@ -49,7 +50,7 @@ export function initEngine(profile: PlayerProfile | null): EngineState {
   // Seed initial levers from player profile
   const levers: LeverSettings = {
     sequenceGrowth: p.wmCapacity >= 6 ? 2 : 1,
-    tempoRamp: p.baselineRt < 350 ? -30 : -20,
+    tempoRamp: p.baselineRt < 350 ? -20 : -10,
     mutationRate: p.flexRating > 0.6 ? 0.2 : 0,
     gridSize: 3,
   };
@@ -60,6 +61,7 @@ export function initEngine(profile: PlayerProfile | null): EngineState {
     consecutiveMutationSurvives: 0,
     consecutiveFailedMutations: 0,
     intensity: 0,
+    currentFlashDuration: 600,
   };
 }
 
@@ -113,18 +115,20 @@ export function updateEngine(
     if (accuracy > 0.9 && avgRt < 350) {
       // Player is well below ceiling — accelerate all axes
       levers.sequenceGrowth = 2;
-      levers.tempoRamp = -30; // was -40, capped to avoid overwhelming speed ramp
+      levers.tempoRamp = -30;
       levers.mutationRate = clampMutationRate(levers.mutationRate + 0.15);
     } else if (accuracy > 0.9 && avgRt > 450) {
-      // Memory fine, speed slow — push RT only
+      // Memory fine, speed lagging — push tempo only
       levers.sequenceGrowth = 1;
-      levers.tempoRamp = -30; // was -35
-    } else if (accuracy >= 0.7 && accuracy <= 0.9 && avgRt < 400) {
-      // Target ZPD — don't adjust
-    } else if (accuracy < 0.7) {
-      // Overwhelmed — ease back
+      levers.tempoRamp = -20;
+    } else if (accuracy >= 0.8 && accuracy <= 0.9 && avgRt < 400) {
+      // Target ZPD — hold steady, don't grow sequence
+      levers.sequenceGrowth = 0;
+      levers.tempoRamp = 0;
+    } else if (accuracy < 0.8) {
+      // Overwhelmed — ease back and slow down
       levers.sequenceGrowth = 1;
-      levers.tempoRamp = -15;
+      levers.tempoRamp = +40;
       levers.mutationRate = clampMutationRate(levers.mutationRate - 0.15);
     }
 
@@ -150,10 +154,16 @@ export function updateEngine(
     levers.gridSize = 5;
   }
 
+  // Accumulate tempo: apply this round's ramp delta to the running flash duration
+  const newFlashDuration = Math.min(
+    800,
+    Math.max(300, state.currentFlashDuration + levers.tempoRamp)
+  );
+
   // Compute intensity (0–1) — how hard the engine is pushing
   const intensityScore =
     ((levers.sequenceGrowth - 1) / 2) * 0.3 +
-    (Math.abs(levers.tempoRamp) / 50) * 0.4 +
+    ((800 - newFlashDuration) / 500) * 0.4 +
     (levers.mutationRate / 0.6) * 0.3;
 
   return {
@@ -162,6 +172,7 @@ export function updateEngine(
     consecutiveMutationSurvives,
     consecutiveFailedMutations,
     intensity: Math.min(1, intensityScore),
+    currentFlashDuration: newFlashDuration,
   };
 }
 

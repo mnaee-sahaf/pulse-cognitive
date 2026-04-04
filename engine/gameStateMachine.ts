@@ -65,8 +65,7 @@ export interface GameState {
   currentFlashIndex: number;  // which cell is currently illuminated (-1 = none)
 }
 
-const INITIAL_FLASH_DURATION = 600; // ms
-const INITIAL_FLASH_GAP = 250;      // ms between cells
+const INITIAL_FLASH_GAP = 250; // ms between cells
 
 export function createInitialGameState(profile: PlayerProfile | null): GameState {
   return {
@@ -87,16 +86,11 @@ export function createInitialGameState(profile: PlayerProfile | null): GameState
   };
 }
 
-/** Computes flash duration for the current round based on tempo ramp history. */
-function calcFlashDuration(roundCount: number, tempoRamp: number): number {
-  const duration = INITIAL_FLASH_DURATION + tempoRamp * roundCount;
-  return Math.max(300, duration); // floor raised from 200ms → 300ms
-}
-
 /** Builds the next round state from engine settings. */
 export function buildRound(state: GameState): RoundState {
   const { levers } = state.engine;
-  const prevLength = state.round?.displaySequence.length ?? 2;
+  // Start at length 1 so round 1 adds sequenceGrowth (1) → first sequence is 2 cells
+  const prevLength = state.round?.displaySequence.length ?? 1;
   const newLength = Math.min(prevLength + levers.sequenceGrowth, levers.gridSize * levers.gridSize);
 
   const displaySequence = generateSequence(newLength, levers.gridSize);
@@ -106,15 +100,13 @@ export function buildRound(state: GameState): RoundState {
     ? generatePoisonCell(displaySequence, levers.gridSize)
     : null;
 
-  const flashDuration = calcFlashDuration(state.roundCount, levers.tempoRamp);
-
   return {
     round: state.roundCount + 1,
     displaySequence,
     expectedSequence,
     mutation,
     poisonCell,
-    flashDuration,
+    flashDuration: state.engine.currentFlashDuration,
     flashGap: INITIAL_FLASH_GAP,
     gridSize: levers.gridSize,
   };
