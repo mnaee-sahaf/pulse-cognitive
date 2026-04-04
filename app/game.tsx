@@ -26,9 +26,13 @@ export default function GameScreen() {
     engine,
     roundCount,
     lives,
+    gameMode,
+    emberHits,
     setFlashIndex,
     startRecall,
     handleTap,
+    handleWatchTap,
+    finishEmberSequence,
     advanceRound,
   } = state;
 
@@ -38,6 +42,7 @@ export default function GameScreen() {
   const watchEndTimeRef = useRef(0);
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevLivesRef = useRef(lives);
+  const flashStartRef = useRef(0); // Ember: when current cell started illuminating
 
   // Buzz when a life is lost
   useEffect(() => {
@@ -55,11 +60,16 @@ export default function GameScreen() {
     const flashNext = () => {
       if (i >= round.displaySequence.length) {
         setFlashIndex(-1);
-        watchEndTimeRef.current = performance.now();
-        setTimeout(() => startRecall(watchEndTimeRef.current), round.flashGap);
+        if (gameMode === 'ember') {
+          setTimeout(() => finishEmberSequence(), round.flashGap);
+        } else {
+          watchEndTimeRef.current = performance.now();
+          setTimeout(() => startRecall(watchEndTimeRef.current), round.flashGap);
+        }
         return;
       }
       setFlashIndex(round.displaySequence[i]);
+      flashStartRef.current = performance.now();
       i++;
       flashTimerRef.current = setTimeout(() => {
         setFlashIndex(-1);
@@ -102,10 +112,26 @@ export default function GameScreen() {
   if (!round) return null;
 
   const isRecalling = phase === 'recall';
+  const isEmberWatch = gameMode === 'ember' && phase === 'watch';
+
+  const onGridTap = useCallback((cellIndex: number, time: number) => {
+    if (isEmberWatch) {
+      handleWatchTap(cellIndex, time - flashStartRef.current);
+    } else {
+      handleTap(cellIndex, time);
+    }
+  }, [isEmberWatch, handleWatchTap, handleTap]);
   const phaseLabel =
+    phase === 'feedback' ? 'GOOD' :
+    gameMode === 'ember' ? 'INTERCEPT' :
+    gameMode === 'tide' && phase === 'recall' ? 'REVERSE' :
     phase === 'watch' ? 'WATCH' :
-    phase === 'recall' ? 'RECALL' :
-    phase === 'feedback' ? 'GOOD' : '';
+    phase === 'recall' ? 'RECALL' : '';
+
+  const modeColor =
+    gameMode === 'ember' ? '#FF6B35' :
+    gameMode === 'tide'  ? '#2D9CDB' :
+    Colors.accent;
 
   const mutationLabel = round.mutation !== 'none' ? round.mutation.toUpperCase() : null;
 
@@ -120,18 +146,34 @@ export default function GameScreen() {
             <Text style={styles.hudLabel}>SCORE</Text>
           </View>
           <View style={styles.hudCenter}>
+            {/* Mode badge */}
+            <View style={[styles.modeBadge, { backgroundColor: modeColor + '22', borderColor: modeColor + '55' }]}>
+              <Text style={[styles.modeText, { color: modeColor }]}>
+                {gameMode.toUpperCase()}
+              </Text>
+            </View>
+
             <Text style={[
               styles.phaseLabel,
-              phase === 'recall' && styles.phaseLabelRecall,
+              (phase === 'recall' || isEmberWatch) && { color: modeColor },
               phase === 'feedback' && styles.phaseLabelFeedback,
             ]}>
               {phaseLabel}
             </Text>
+
             {mutationLabel && (
               <View style={styles.mutationBadge}>
                 <Text style={styles.mutationText}>{mutationLabel}</Text>
               </View>
             )}
+
+            {/* Ember: hit counter instead of recall progress */}
+            {gameMode === 'ember' && phase === 'watch' && round && (
+              <Text style={[styles.emberCounter, { color: modeColor }]}>
+                {emberHits}/{round.displaySequence.length}
+              </Text>
+            )}
+
             <View style={styles.livesRow}>
               {Array.from({ length: 3 }, (_, i) => (
                 <View
@@ -167,8 +209,8 @@ export default function GameScreen() {
             illuminatedCell={currentFlashIndex}
             poisonCell={round.poisonCell}
             tapStates={tapStates()}
-            onTap={handleTap}
-            disabled={!isRecalling}
+            onTap={onGridTap}
+            disabled={!isRecalling && !isEmberWatch}
           />
         </View>
 
@@ -231,6 +273,18 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
+  modeBadge: {
+    borderRadius: 6,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginBottom: 2,
+  },
+  modeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 2,
+  },
   phaseLabel: {
     fontSize: 13,
     fontWeight: '600',
@@ -238,11 +292,14 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     textTransform: 'uppercase',
   },
-  phaseLabelRecall: {
-    color: Colors.accent,
-  },
   phaseLabelFeedback: {
     color: Colors.success,
+  },
+  emberCounter: {
+    fontSize: 18,
+    fontWeight: '700',
+    fontFamily: 'serif',
+    letterSpacing: -0.5,
   },
   mutationBadge: {
     backgroundColor: Colors.warning + '22',

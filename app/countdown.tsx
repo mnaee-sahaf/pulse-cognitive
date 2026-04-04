@@ -14,6 +14,8 @@ import { Colors, FontSize } from '../constants/theme';
 import { loadPlayerProfile } from '../db/playerProfile';
 import { loadEngineConfig } from '../db/engineConfig';
 import { loadAppSettings } from '../db/appSettings';
+import { loadCompanion } from '../db/companion';
+import type { GameMode } from '../engine/gameStateMachine';
 
 export default function CountdownScreen() {
   const router = useRouter();
@@ -28,8 +30,11 @@ export default function CountdownScreen() {
   }));
 
   useEffect(() => {
-    Promise.all([loadPlayerProfile(), loadEngineConfig(), loadAppSettings()])
-      .then(([profile, config, appSettings]) => startSession(profile, config, appSettings.lives))
+    Promise.all([loadPlayerProfile(), loadEngineConfig(), loadAppSettings(), loadCompanion()])
+      .then(([profile, config, appSettings, companion]) => {
+        const gameMode = (companion?.companionId ?? 'arc') as GameMode;
+        startSession(profile, config, appSettings.lives, gameMode);
+      })
       .catch(() => startSession(null));
     animateTick(3);
   }, []);

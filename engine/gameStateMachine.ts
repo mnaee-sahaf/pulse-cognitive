@@ -14,6 +14,9 @@ import {
   type RoundPerformance,
 } from './adaptiveEngine';
 import { ENGINE_CONFIG_DEFAULTS, type EngineConfig } from './engineConfig';
+
+/** Each companion trains a different cognitive mode. */
+export type GameMode = 'arc' | 'tide' | 'ember';
 import { calcRoundScore, calcCognitiveScores, type CognitiveScores } from './scoring';
 
 export type GamePhase = 'idle' | 'watch' | 'recall' | 'feedback' | 'ended';
@@ -65,6 +68,8 @@ export interface GameState {
   summary: SessionSummary | null;
   currentFlashIndex: number;  // which cell is currently illuminated (-1 = none)
   lives: number;              // remaining lives (session ends at 0)
+  gameMode: GameMode;
+  emberHits: number;          // Ember mode: cells intercepted in current watch sequence
 }
 
 const INITIAL_FLASH_GAP = 250; // ms between cells
@@ -72,7 +77,8 @@ const INITIAL_FLASH_GAP = 250; // ms between cells
 export function createInitialGameState(
   profile: PlayerProfile | null,
   config: EngineConfig = ENGINE_CONFIG_DEFAULTS,
-  startingLives = 3
+  startingLives = 3,
+  gameMode: GameMode = 'arc'
 ): GameState {
   return {
     phase: 'idle',
@@ -90,6 +96,8 @@ export function createInitialGameState(
     summary: null,
     currentFlashIndex: -1,
     lives: startingLives,
+    gameMode,
+    emberHits: 0,
   };
 }
 
@@ -101,16 +109,26 @@ export function buildRound(state: GameState): RoundState {
   const newLength = Math.min(prevLength + levers.sequenceGrowth, levers.gridSize * levers.gridSize);
 
   const displaySequence = generateSequence(newLength, levers.gridSize);
-  const mutation = selectMutation(levers, state.engine.consecutiveFailedMutations);
+
+  // Ember only uses poison (mirror/reverse apply to recall order, which Ember doesn't have)
+  const mutation = state.gameMode === 'ember'
+    ? (Math.random() < levers.mutationRate * 0.6 ? 'poison' : 'none') as Mutation
+    : selectMutation(levers, state.engine.consecutiveFailedMutations);
+
   const expectedSequence = getExpectedRecallSequence(displaySequence, mutation, levers.gridSize);
   const poisonCell = mutation === 'poison'
     ? generatePoisonCell(displaySequence, levers.gridSize)
     : null;
 
+  // Tide recalls in reverse — watch forward, recall backward
+  const finalExpectedSequence = state.gameMode === 'tide'
+    ? [...expectedSequence].reverse()
+    : expectedSequence;
+
   return {
     round: state.roundCount + 1,
     displaySequence,
-    expectedSequence,
+    expectedSequence: finalExpectedSequence,
     mutation,
     poisonCell,
     flashDuration: state.engine.currentFlashDuration,
@@ -249,7 +267,7 @@ export function completeRound(state: GameState): Partial<GameState> {
   };
 }
 
-function buildSummary(state: GameState): SessionSummary {
+export function buildSummary(state: GameState): SessionSummary {
   const allRts = state.sessionRts;
   const avgRt = allRts.length > 0
     ? allRts.reduce((a, b) => a + b, 0) / allRts.length
