@@ -46,6 +46,7 @@ export default function GameScreen() {
   const hapticFeedback = useAppSettings((s) => s.hapticFeedback);
   const watchEndTimeRef = useRef(0);
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const emberFinishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevLivesRef = useRef(lives);
   const flashStartRef = useRef(0);
 
@@ -76,7 +77,7 @@ export default function GameScreen() {
       if (i >= round.displaySequence.length) {
         setFlashIndex(-1);
         if (gameMode === 'ember') {
-          setTimeout(() => finishEmberSequence(), round.flashGap);
+          emberFinishTimerRef.current = setTimeout(() => finishEmberSequence(), round.flashGap);
         } else {
           watchEndTimeRef.current = performance.now();
           setTimeout(() => startRecall(watchEndTimeRef.current), round.flashGap);
@@ -103,6 +104,7 @@ export default function GameScreen() {
     return () => {
       clearTimeout(startTimer);
       if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+      if (emberFinishTimerRef.current) clearTimeout(emberFinishTimerRef.current);
     };
   }, [phase, round?.round]);
 
