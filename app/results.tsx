@@ -43,7 +43,7 @@ export default function ResultsScreen() {
     savedRef.current = true;
 
     const persist = async () => {
-      await saveSession(summary, engine.roundHistory.map(() => engine.levers));
+      await saveSession(summary, engine.leverHistory);
       const seed = await getProfileSeedData(10);
       await updatePlayerProfile(seed.avgRts, seed.maxSequenceLengths, seed.flexRatings);
 

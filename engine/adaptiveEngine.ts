@@ -25,6 +25,7 @@ export interface PlayerProfile {
 export interface EngineState {
   levers: LeverSettings;
   roundHistory: RoundPerformance[];
+  leverHistory: LeverSettings[];  // snapshot of levers active at the start of each round
   consecutiveMutationSurvives: number;
   consecutiveFailedMutations: number;
   intensity: number;             // 0.0–1.0 snapshot of how hard the engine is pushing
@@ -63,6 +64,7 @@ export function initEngine(
   return {
     levers,
     roundHistory: [],
+    leverHistory: [],
     consecutiveMutationSurvives: 0,
     consecutiveFailedMutations: 0,
     intensity: 0,
@@ -101,6 +103,7 @@ export function updateEngine(
   currentRound: number
 ): EngineState {
   const history = [...state.roundHistory, roundPerf];
+  const leverHistory = [...state.leverHistory, { ...state.levers }];
   let levers = { ...state.levers };
   let { consecutiveMutationSurvives, consecutiveFailedMutations } = state;
 
@@ -182,6 +185,7 @@ export function updateEngine(
   return {
     levers,
     roundHistory: history,
+    leverHistory,
     consecutiveMutationSurvives,
     consecutiveFailedMutations,
     intensity: Math.min(1, intensityScore),
