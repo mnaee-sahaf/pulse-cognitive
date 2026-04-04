@@ -54,6 +54,7 @@ interface CellProps {
   disabled: boolean;
   themeColor: string;
   tileShape: TileShape;
+  hideWhenIdle?: boolean;
 }
 
 export function Cell({
@@ -66,6 +67,7 @@ export function Cell({
   disabled,
   themeColor,
   tileShape,
+  hideWhenIdle = false,
 }: CellProps) {
   const greenTileFeedback = useAppSettings((s) => s.greenTileFeedback);
   const hapticFeedback = useAppSettings((s) => s.hapticFeedback);
@@ -76,7 +78,10 @@ export function Cell({
     return '';
   }, [tileShape, size]);
 
-  const idleColor = themeColor + '30';
+  const idleColor = useMemo(
+    () => hideWhenIdle ? themeColor + '00' : themeColor + '30',
+    [hideWhenIdle, themeColor]
+  );
   const poisonColor = '#FFAAAA';
 
   const fillColor = useSharedValue(idleColor);
@@ -95,7 +100,7 @@ export function Cell({
       scale.value = withTiming(1.0, { duration: 150 });
       glowOpacity.value = withTiming(0, { duration: 180 });
     }
-  }, [isIlluminated, isPoison, themeColor]);
+  }, [isIlluminated, isPoison, themeColor, idleColor]);
 
   // Tap feedback
   useEffect(() => {
@@ -123,7 +128,7 @@ export function Cell({
         withTiming(0, { duration: 90 })
       );
     }
-  }, [tapState]);
+  }, [tapState, idleColor, greenTileFeedback]);
 
   // Wrapper handles scale, shake, and glow shadow
   const wrapperStyle = useAnimatedStyle(() => ({
