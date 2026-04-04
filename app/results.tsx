@@ -17,6 +17,8 @@ import Animated, {
 import { useRouter } from 'expo-router';
 import { useGameStore } from '../store/gameStore';
 import { Colors, FontSize, Spacing } from '../constants/theme';
+import { AnimatedBackground } from '../components/AnimatedBackground';
+import { useAppSettings } from '../store/appSettingsStore';
 import { saveSession, getProfileSeedData } from '../db/sessions';
 import { updatePlayerProfile } from '../db/playerProfile';
 import { awardXp, loadCompanion, scoreToXp, type CompanionState } from '../db/companion';
@@ -26,6 +28,7 @@ import { LevelUpModal } from '../components/LevelUpModal';
 export default function ResultsScreen() {
   const router = useRouter();
   const { summary, engine, resetSession } = useGameStore();
+  const animatedBackground = useAppSettings((s) => s.animatedBackground);
   const savedRef = useRef(false);
   const [companion, setCompanion] = useState<CompanionState | null>(null);
   const [xpGained, setXpGained] = useState(0);
@@ -69,6 +72,7 @@ export default function ResultsScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
+      {animatedBackground && <AnimatedBackground />}
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}

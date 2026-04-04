@@ -54,5 +54,10 @@ async function migrate(db: SQLite.SQLiteDatabase) {
       id INTEGER PRIMARY KEY CHECK (id = 1),
       config_json TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS app_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      animated_background INTEGER NOT NULL DEFAULT 0
+    );
   `);
 }

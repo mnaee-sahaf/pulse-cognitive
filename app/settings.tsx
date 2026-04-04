@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Share,
   Alert,
+  Switch,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
@@ -16,6 +17,8 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Colors, FontSize, Spacing } from '../constants/theme';
 import { ENGINE_CONFIG_DEFAULTS, type EngineConfig } from '../engine/engineConfig';
 import { loadEngineConfig, saveEngineConfig } from '../db/engineConfig';
+import { loadAppSettings, saveAppSettings } from '../db/appSettings';
+import { useAppSettings } from '../store/appSettingsStore';
 
 // ------- Draft state — all values stored as strings while editing -------
 type DraftConfig = { [K in keyof EngineConfig]: string };
@@ -112,12 +115,20 @@ export default function SettingsScreen() {
   const router = useRouter();
   const [draft, setDraft] = useState<DraftConfig>(toDraft(ENGINE_CONFIG_DEFAULTS));
   const [saved, setSaved] = useState(false);
+  const animatedBackground = useAppSettings((s) => s.animatedBackground);
+  const setAnimatedBackground = useAppSettings((s) => s.setAnimatedBackground);
 
   useFocusEffect(
     useCallback(() => {
       loadEngineConfig().then((cfg) => setDraft(toDraft(cfg))).catch(console.error);
+      loadAppSettings().then((s) => setAnimatedBackground(s.animatedBackground)).catch(console.error);
     }, [])
   );
+
+  async function toggleAnimatedBackground(v: boolean) {
+    setAnimatedBackground(v);
+    await saveAppSettings({ animatedBackground: v }).catch(console.error);
+  }
 
   function updateField(key: keyof EngineConfig, value: string) {
     setDraft((d) => ({ ...d, [key]: value }));
@@ -176,7 +187,28 @@ export default function SettingsScreen() {
             </Text>
           </View>
 
-          {/* Sections */}
+          {/* Visual */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Visual</Text>
+            <View style={styles.card}>
+              <View style={styles.fieldRow}>
+                <View style={styles.fieldLeft}>
+                  <Text style={styles.fieldLabel}>Animated Background</Text>
+                  <Text style={styles.fieldHint}>
+                    Soft pastel blobs drifting behind home + results screens
+                  </Text>
+                </View>
+                <Switch
+                  value={animatedBackground}
+                  onValueChange={toggleAnimatedBackground}
+                  trackColor={{ false: Colors.border, true: Colors.accent + '88' }}
+                  thumbColor={animatedBackground ? Colors.accent : Colors.textTertiary}
+                />
+              </View>
+            </View>
+          </View>
+
+          {/* Engine Sections */}
           {SECTIONS.map((section) => (
             <View key={section.title} style={styles.section}>
               <Text style={styles.sectionTitle}>{section.title.toUpperCase()}</Text>

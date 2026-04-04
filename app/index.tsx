@@ -11,11 +11,14 @@ import { Colors, FontSize, Spacing } from '../constants/theme';
 import { getLifetimeStats } from '../db/sessions';
 import { loadCompanion, type CompanionState } from '../db/companion';
 import { Companion } from '../components/Companion';
+import { AnimatedBackground } from '../components/AnimatedBackground';
+import { useAppSettings } from '../store/appSettingsStore';
 
 export default function HomeScreen() {
   const router = useRouter();
   const [stats, setStats] = useState({ sessionCount: 0, bestRt: 0, avgScore: 0 });
   const [companion, setCompanion] = useState<CompanionState | null>(null);
+  const animatedBackground = useAppSettings((s) => s.animatedBackground);
 
   useFocusEffect(
     useCallback(() => {
@@ -34,6 +37,7 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
+      {animatedBackground && <AnimatedBackground />}
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.logo}>
