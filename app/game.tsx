@@ -9,6 +9,7 @@ import { useRouter } from 'expo-router';
 import { useGameStore } from '../store/gameStore';
 import { Grid } from '../components/Grid';
 import { Colors, FontSize, Spacing } from '../constants/theme';
+import * as Haptics from 'expo-haptics';
 import { AnimatedBackground } from '../components/AnimatedBackground';
 import { useAppSettings } from '../store/appSettingsStore';
 
@@ -63,9 +64,10 @@ export default function GameScreen() {
     };
   }, [phase, round?.round]);
 
-  // Feedback phase: brief green moment then advance
+  // Feedback phase: buzz on sequence complete, then advance
   useEffect(() => {
     if (phase !== 'feedback') return;
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const t = setTimeout(() => advanceRound(), 600);
     return () => clearTimeout(t);
   }, [phase]);

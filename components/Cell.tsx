@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -89,7 +90,10 @@ export function Cell({
     <AnimatedPressable
       style={[styles.cell, { width: size, height: size }, animStyle]}
       onPress={() => {
-        if (!disabled) onTap(index, performance.now());
+        if (!disabled) {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          onTap(index, performance.now());
+        }
       }}
       disabled={disabled}
     />
