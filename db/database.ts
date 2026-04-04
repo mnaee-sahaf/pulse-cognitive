@@ -1,6 +1,55 @@
 import * as SQLite from 'expo-sqlite';
+import * as FileSystem from 'expo-file-system/legacy';
 
 let db: SQLite.SQLiteDatabase | null = null;
+
+const DB_PATH     = `${FileSystem.documentDirectory}SQLite/pulse.db`;
+const BACKUP_PATH = `${FileSystem.documentDirectory}SQLite/pulse_backup.db`;
+
+// ── Dev-only helpers ────────────────────────────────────────────────────────
+
+// TODO: backup/restore via file copy is not working reliably with expo-sqlite v16.
+// Needs proper research — likely requires using SQLite's VACUUM INTO, a different
+// file path strategy, or serialising/deserialising all table data as JSON instead
+// of copying the raw .db file. Leaving stubs so the UI stays wired up.
+export async function backupDatabase(): Promise<void> {
+  const database = await getDb();
+  await database.execAsync('PRAGMA wal_checkpoint(TRUNCATE)');
+  await FileSystem.deleteAsync(BACKUP_PATH, { idempotent: true });
+  await FileSystem.copyAsync({ from: DB_PATH, to: BACKUP_PATH });
+}
+
+export async function restoreDatabase(): Promise<void> {
+  const info = await FileSystem.getInfoAsync(BACKUP_PATH);
+  if (!info.exists) throw new Error('No backup found');
+  if (db) {
+    await db.closeAsync();
+    db = null;
+  }
+  await FileSystem.deleteAsync(DB_PATH + '-wal', { idempotent: true });
+  await FileSystem.deleteAsync(DB_PATH + '-shm', { idempotent: true });
+  await FileSystem.deleteAsync(DB_PATH, { idempotent: true });
+  await FileSystem.copyAsync({ from: BACKUP_PATH, to: DB_PATH });
+  await getDb();
+}
+
+export async function hasBackup(): Promise<boolean> {
+  const info = await FileSystem.getInfoAsync(BACKUP_PATH);
+  return info.exists;
+}
+
+/** Dev-only: wipe every table so the app behaves like a fresh install. */
+export async function resetAllData(): Promise<void> {
+  const db = await getDb();
+  await db.execAsync(`
+    DELETE FROM companion;
+    DELETE FROM companion_levels;
+    DELETE FROM sessions;
+    DELETE FROM player_profile;
+    DELETE FROM engine_config;
+    DELETE FROM app_settings;
+  `);
+}
 
 export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (db) return db;

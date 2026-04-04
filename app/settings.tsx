@@ -18,6 +18,7 @@ import { Colors, FontSize, Spacing } from '../constants/theme';
 import { ENGINE_CONFIG_DEFAULTS, type EngineConfig } from '../engine/engineConfig';
 import { loadEngineConfig, saveEngineConfig } from '../db/engineConfig';
 import { loadAppSettings, saveAppSettings } from '../db/appSettings';
+import { resetAllData, backupDatabase, restoreDatabase, hasBackup } from '../db/database';
 import { useAppSettings } from '../store/appSettingsStore';
 
 // ------- Draft state — all values stored as strings while editing -------
@@ -129,10 +130,12 @@ export default function SettingsScreen() {
 
   const [intensityDraft, setIntensityDraft] = useState(String(backgroundIntensity));
   const [livesDraft, setLivesDraft] = useState(String(lives));
+  const [backupExists, setBackupExists] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       loadEngineConfig().then((cfg) => setDraft(toDraft(cfg))).catch(console.error);
+      if (__DEV__) hasBackup().then(setBackupExists).catch(console.error);
       loadAppSettings().then((s) => {
         setAnimatedBackground(s.animatedBackground);
         setBackgroundIntensity(s.backgroundIntensity);
@@ -209,6 +212,72 @@ export default function SettingsScreen() {
         },
       },
     ]);
+  }
+
+  function handleBackup() {
+    Alert.alert(
+      'Backup Current Session',
+      'Saves a snapshot of your current data. Any previous backup will be overwritten.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Backup',
+          onPress: async () => {
+            await backupDatabase();
+            setBackupExists(true);
+            Alert.alert('Backup saved', 'You can restore it at any time from this screen.');
+          },
+        },
+      ]
+    );
+  }
+
+  function handleRestore() {
+    Alert.alert(
+      'Restore Backup',
+      'This will replace your current data with the backup. Any progress since the backup will be lost.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Restore',
+          style: 'destructive',
+          onPress: async () => {
+            await restoreDatabase();
+            // Reload store from the restored DB so in-memory state matches
+            const s = await loadAppSettings();
+            setAnimatedBackground(s.animatedBackground);
+            setBackgroundIntensity(s.backgroundIntensity);
+            setLives(s.lives);
+            setGreenTileFeedback(s.greenTileFeedback);
+            setHapticFeedback(s.hapticFeedback);
+            router.replace('/');
+          },
+        },
+      ]
+    );
+  }
+
+  function handleResetFreshUser() {
+    Alert.alert(
+      'Reset to Fresh User',
+      'This will delete ALL data — sessions, companion progress, profile, and settings. The onboarding flow will restart.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset Everything',
+          style: 'destructive',
+          onPress: async () => {
+            await resetAllData();
+            setAnimatedBackground(false);
+            setBackgroundIntensity(1.0);
+            setLives(3);
+            setGreenTileFeedback(true);
+            setHapticFeedback(true);
+            router.replace('/choose-companion');
+          },
+        },
+      ]
+    );
   }
 
   async function handleShare() {
@@ -395,6 +464,59 @@ export default function SettingsScreen() {
               </Pressable>
             </View>
           </View>
+
+          {/* Dev Tools — only visible in __DEV__ builds */}
+          {__DEV__ && (
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: Colors.warning }]}>
+                ⚠ DEV TOOLS
+              </Text>
+              <View style={styles.card}>
+                <Pressable
+                  style={({ pressed }) => [styles.fieldRow, styles.fieldDivider, pressed && styles.pressed]}
+                  onPress={handleBackup}
+                >
+                  <View style={styles.fieldLeft}>
+                    <Text style={styles.fieldLabel}>Backup Current Session</Text>
+                    <Text style={styles.fieldHint}>
+                      Snapshot all data so you can restore it after testing.
+                      {backupExists ? ' — backup exists ✓' : ' — no backup yet'}
+                    </Text>
+                  </View>
+                </Pressable>
+
+                {backupExists && (
+                  <Pressable
+                    style={({ pressed }) => [styles.fieldRow, styles.fieldDivider, pressed && styles.pressed]}
+                    onPress={handleRestore}
+                  >
+                    <View style={styles.fieldLeft}>
+                      <Text style={[styles.fieldLabel, { color: Colors.accent }]}>
+                        Restore Backup
+                      </Text>
+                      <Text style={styles.fieldHint}>
+                        Replace current data with your saved snapshot and return home.
+                      </Text>
+                    </View>
+                  </Pressable>
+                )}
+
+                <Pressable
+                  style={({ pressed }) => [styles.fieldRow, pressed && styles.pressed]}
+                  onPress={handleResetFreshUser}
+                >
+                  <View style={styles.fieldLeft}>
+                    <Text style={[styles.fieldLabel, { color: Colors.danger }]}>
+                      Reset to Fresh User
+                    </Text>
+                    <Text style={styles.fieldHint}>
+                      Wipes all data and restarts onboarding. Use to test the full new-user flow.
+                    </Text>
+                  </View>
+                </Pressable>
+              </View>
+            </View>
+          )}
 
           {/* JSON preview */}
           <View style={styles.jsonBlock}>
