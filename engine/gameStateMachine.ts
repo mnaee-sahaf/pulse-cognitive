@@ -71,7 +71,8 @@ const INITIAL_FLASH_GAP = 250; // ms between cells
 
 export function createInitialGameState(
   profile: PlayerProfile | null,
-  config: EngineConfig = ENGINE_CONFIG_DEFAULTS
+  config: EngineConfig = ENGINE_CONFIG_DEFAULTS,
+  startingLives = 3
 ): GameState {
   return {
     phase: 'idle',
@@ -88,7 +89,7 @@ export function createInitialGameState(
     roundCount: 0,
     summary: null,
     currentFlashIndex: -1,
-    lives: 3,
+    lives: startingLives,
   };
 }
 

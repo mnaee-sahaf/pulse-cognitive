@@ -34,6 +34,7 @@ export default function GameScreen() {
 
   const animatedBackground = useAppSettings((s) => s.animatedBackground);
   const backgroundIntensity = useAppSettings((s) => s.backgroundIntensity);
+  const hapticFeedback = useAppSettings((s) => s.hapticFeedback);
   const watchEndTimeRef = useRef(0);
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevLivesRef = useRef(lives);
@@ -41,10 +42,10 @@ export default function GameScreen() {
   // Buzz when a life is lost
   useEffect(() => {
     if (lives < prevLivesRef.current) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      if (hapticFeedback) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
     prevLivesRef.current = lives;
-  }, [lives]);
+  }, [lives, hapticFeedback]);
 
   // Watch phase: flash cells in sequence
   useEffect(() => {
@@ -77,7 +78,7 @@ export default function GameScreen() {
   // Feedback phase: buzz on sequence complete, then advance
   useEffect(() => {
     if (phase !== 'feedback') return;
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    if (hapticFeedback) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const t = setTimeout(() => advanceRound(), 600);
     return () => clearTimeout(t);
   }, [phase]);

@@ -11,7 +11,7 @@ import { ENGINE_CONFIG_DEFAULTS, type EngineConfig } from '../engine/engineConfi
 
 interface GameStore extends GameState {
   // Actions
-  startSession: (profile: PlayerProfile | null, config?: EngineConfig) => void;
+  startSession: (profile: PlayerProfile | null, config?: EngineConfig, lives?: number) => void;
   startWatch: () => void;
   setFlashIndex: (index: number) => void;
   startRecall: (watchEndTime: number) => void;
@@ -25,8 +25,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   ...createInitialGameState(null),
   _watchEndTime: 0,
 
-  startSession: (profile, config = ENGINE_CONFIG_DEFAULTS) => {
-    const initial = createInitialGameState(profile, config);
+  startSession: (profile, config = ENGINE_CONFIG_DEFAULTS, lives = 3) => {
+    const initial = createInitialGameState(profile, config, lives);
     const firstRound = buildRound(initial);
     set({
       ...initial,

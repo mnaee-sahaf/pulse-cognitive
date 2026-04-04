@@ -13,6 +13,7 @@ import { useGameStore } from '../store/gameStore';
 import { Colors, FontSize } from '../constants/theme';
 import { loadPlayerProfile } from '../db/playerProfile';
 import { loadEngineConfig } from '../db/engineConfig';
+import { loadAppSettings } from '../db/appSettings';
 
 export default function CountdownScreen() {
   const router = useRouter();
@@ -27,8 +28,8 @@ export default function CountdownScreen() {
   }));
 
   useEffect(() => {
-    Promise.all([loadPlayerProfile(), loadEngineConfig()])
-      .then(([profile, config]) => startSession(profile, config))
+    Promise.all([loadPlayerProfile(), loadEngineConfig(), loadAppSettings()])
+      .then(([profile, config, appSettings]) => startSession(profile, config, appSettings.lives))
       .catch(() => startSession(null));
     animateTick(3);
   }, []);

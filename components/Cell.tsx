@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { useAppSettings } from '../store/appSettingsStore';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -33,6 +34,9 @@ export function Cell({
   onTap,
   disabled,
 }: CellProps) {
+  const greenTileFeedback = useAppSettings((s) => s.greenTileFeedback);
+  const hapticFeedback = useAppSettings((s) => s.hapticFeedback);
+
   const bgColor = useSharedValue<string>(Colors.surface);
   const scale = useSharedValue(1);
   const translateX = useSharedValue(0);
@@ -54,10 +58,12 @@ export function Cell({
   // Tap feedback effects
   useEffect(() => {
     if (tapState === 'correct') {
-      bgColor.value = withSequence(
-        withTiming(Colors.success, { duration: 80 }),
-        withTiming(Colors.surface, { duration: 270 })
-      );
+      if (greenTileFeedback) {
+        bgColor.value = withSequence(
+          withTiming(Colors.success, { duration: 80 }),
+          withTiming(Colors.surface, { duration: 270 })
+        );
+      }
       scale.value = withSequence(
         withSpring(1.1, { damping: 10, stiffness: 300 }),
         withSpring(1.0, { damping: 15, stiffness: 200 })
@@ -91,7 +97,7 @@ export function Cell({
       style={[styles.cell, { width: size, height: size }, animStyle]}
       onPress={() => {
         if (!disabled) {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          if (hapticFeedback) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           onTap(index, performance.now());
         }
       }}
