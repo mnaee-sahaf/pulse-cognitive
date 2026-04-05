@@ -16,8 +16,10 @@ import {
   type CompanionState,
   type CompanionId,
 } from '../db/companion';
+import { loadPurchaseState, isCompanionUnlocked, type PurchaseState } from '../db/purchaseState';
 import { Companion } from '../components/Companion';
 import { CompanionSwitcher } from '../components/CompanionSwitcher';
+import { UpgradePrompt } from '../components/UpgradePrompt';
 import { AnimatedBackground } from '../components/AnimatedBackground';
 import { useAppSettings } from '../store/appSettingsStore';
 
@@ -26,7 +28,9 @@ export default function HomeScreen() {
   const [stats, setStats] = useState({ sessionCount: 0, bestRt: 0, avgScore: 0 });
   const [companion, setCompanion] = useState<CompanionState | null>(null);
   const [allCompanions, setAllCompanions] = useState<CompanionState[]>([]);
+  const [purchaseState, setPurchaseState] = useState<PurchaseState | null>(null);
   const [switcherVisible, setSwitcherVisible] = useState(false);
+  const [upgradeVisible, setUpgradeVisible] = useState(false);
   const animatedBackground = useAppSettings((s) => s.animatedBackground);
   const backgroundIntensity = useAppSettings((s) => s.backgroundIntensity);
 
@@ -40,6 +44,7 @@ export default function HomeScreen() {
       }
     }).catch(console.error);
     getAllCompanions().then(setAllCompanions).catch(console.error);
+    loadPurchaseState().then(setPurchaseState).catch(console.error);
   }, []);
 
   useFocusEffect(loadData);
@@ -108,9 +113,26 @@ export default function HomeScreen() {
       <CompanionSwitcher
         visible={switcherVisible}
         companions={allCompanions}
+        purchaseState={purchaseState}
         onSelect={handleSwitchCompanion}
+        onUpgrade={() => {
+          setSwitcherVisible(false);
+          setUpgradeVisible(true);
+        }}
         onClose={() => setSwitcherVisible(false)}
       />
+
+      {purchaseState && (
+        <UpgradePrompt
+          visible={upgradeVisible}
+          freeCompanionId={purchaseState.freeCompanionId}
+          onPurchase={() => {
+            // TODO: wire up IAP via RevenueCat or expo-in-app-purchases
+            setUpgradeVisible(false);
+          }}
+          onDismiss={() => setUpgradeVisible(false)}
+        />
+      )}
     </SafeAreaView>
   );
 }

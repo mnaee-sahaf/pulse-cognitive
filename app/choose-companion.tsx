@@ -9,6 +9,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { COMPANIONS, saveCompanionChoice, type CompanionId } from '../db/companion';
+import { saveFreeCompanionChoice } from '../db/purchaseState';
 import { Companion } from '../components/Companion';
 import { Colors, FontSize, Spacing } from '../constants/theme';
 
@@ -23,6 +24,7 @@ export default function ChooseCompanionScreen() {
     if (!selected || confirming) return;
     setConfirming(true);
     await saveCompanionChoice(selected);
+    await saveFreeCompanionChoice(selected);
     router.replace('/');
   };
 
@@ -30,9 +32,9 @@ export default function ChooseCompanionScreen() {
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={styles.title}>Choose Your Companion</Text>
+          <Text style={styles.title}>Choose Your Training</Text>
           <Text style={styles.subtitle}>
-            Your companion grows with you — evolving as your cognitive ceiling rises.
+            Pick one cognitive skill to sharpen for free. You can unlock all three modes later.
           </Text>
         </View>
 
@@ -57,7 +59,15 @@ export default function ChooseCompanionScreen() {
                   showInfo={false}
                 />
                 <View style={styles.cardText}>
-                  <Text style={styles.cardName}>{c.name}</Text>
+                  <View style={styles.cardHeader}>
+                    <Text style={styles.cardName}>{c.name}</Text>
+                    <View style={[styles.modeBadge, { backgroundColor: starterStage.primaryColor + '18', borderColor: starterStage.primaryColor + '40' }]}>
+                      <Text style={[styles.modeBadgeText, { color: starterStage.primaryColor }]}>
+                        {c.modeLabel}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={styles.cardFocus}>Trains: {c.trainingFocus}</Text>
                   <Text style={styles.cardDesc}>{c.description}</Text>
                   <View style={styles.stagesRow}>
                     {c.stages.map((s) => (
@@ -71,13 +81,17 @@ export default function ChooseCompanionScreen() {
                 </View>
                 {isSelected && (
                   <View style={[styles.checkmark, { backgroundColor: starterStage.primaryColor }]}>
-                    <Text style={styles.checkmarkText}>✓</Text>
+                    <Text style={styles.checkmarkText}>{'\u2713'}</Text>
                   </View>
                 )}
               </Pressable>
             );
           })}
         </View>
+
+        <Text style={styles.freeHint}>
+          Your chosen mode is free forever. Unlock all 3 modes for $7.99 anytime.
+        </Text>
 
         <Pressable
           style={({ pressed }) => [
@@ -89,7 +103,7 @@ export default function ChooseCompanionScreen() {
           disabled={!selected || confirming}
         >
           <Text style={styles.ctaText}>
-            {confirming ? 'Starting…' : selected ? `Choose ${COMPANIONS[selected].name}` : 'Select a companion'}
+            {confirming ? 'Starting\u2026' : selected ? `Train ${COMPANIONS[selected].trainingFocus}` : 'Select a training mode'}
           </Text>
         </Pressable>
       </ScrollView>
@@ -103,7 +117,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.pagePadding,
     paddingTop: 40,
     paddingBottom: 48,
-    gap: 32,
+    gap: 24,
   },
   header: { gap: 8 },
   title: {
@@ -133,12 +147,34 @@ const styles = StyleSheet.create({
     borderColor: Colors.accent,
     backgroundColor: Colors.accentSoft,
   },
-  cardText: { flex: 1, gap: 4 },
+  cardText: { flex: 1, gap: 3 },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   cardName: {
     fontSize: 16,
     fontWeight: '600',
     color: Colors.textPrimary,
     fontFamily: 'serif',
+  },
+  modeBadge: {
+    borderRadius: 4,
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  modeBadgeText: {
+    fontSize: 8,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+  },
+  cardFocus: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.accent,
+    letterSpacing: 0.3,
   },
   cardDesc: {
     fontSize: FontSize.label,
@@ -172,6 +208,12 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 13,
     fontWeight: '700',
+  },
+  freeHint: {
+    fontSize: 12,
+    color: Colors.textTertiary,
+    textAlign: 'center',
+    lineHeight: 18,
   },
   cta: {
     backgroundColor: Colors.accent,

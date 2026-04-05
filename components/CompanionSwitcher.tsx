@@ -15,15 +15,18 @@ import {
   type CompanionId,
   type CompanionState,
 } from '../db/companion';
+import { isCompanionUnlocked, type PurchaseState } from '../db/purchaseState';
 
 interface Props {
   visible: boolean;
   companions: CompanionState[];
+  purchaseState: PurchaseState | null;
   onSelect: (id: CompanionId) => void;
+  onUpgrade: () => void;
   onClose: () => void;
 }
 
-export function CompanionSwitcher({ visible, companions, onSelect, onClose }: Props) {
+export function CompanionSwitcher({ visible, companions, purchaseState, onSelect, onUpgrade, onClose }: Props) {
   const orderedIds: CompanionId[] = ['arc', 'tide', 'ember'];
 
   return (
@@ -43,15 +46,27 @@ export function CompanionSwitcher({ visible, companions, onSelect, onClose }: Pr
           {orderedIds.map((id) => {
             const state = companions.find((c) => c.companionId === id);
             if (!state) return null;
+            const unlocked = isCompanionUnlocked(id, purchaseState);
             return (
               <CompanionInfoCard
                 key={id}
                 state={state}
-                onPress={() => onSelect(id)}
+                locked={!unlocked}
+                onPress={() => unlocked ? onSelect(id) : onUpgrade()}
               />
             );
           })}
         </ScrollView>
+
+        {/* Upgrade hint for free users */}
+        {purchaseState && !purchaseState.fullUnlock && (
+          <Pressable
+            style={({ pressed }) => [styles.upgradeHint, pressed && { opacity: 0.8 }]}
+            onPress={onUpgrade}
+          >
+            <Text style={styles.upgradeHintText}>Unlock all modes — $7.99 one-time</Text>
+          </Pressable>
+        )}
 
         <Pressable style={styles.cancelBtn} onPress={onClose}>
           <Text style={styles.cancelText}>Cancel</Text>
@@ -61,7 +76,7 @@ export function CompanionSwitcher({ visible, companions, onSelect, onClose }: Pr
   );
 }
 
-function CompanionInfoCard({ state, onPress }: { state: CompanionState; onPress: () => void }) {
+function CompanionInfoCard({ state, locked = false, onPress }: { state: CompanionState; locked?: boolean; onPress: () => void }) {
   const def = COMPANIONS[state.companionId];
   const stage = getCurrentStage(def, state.level);
   const xpPercent = Math.min(1, state.xp / xpForLevel(state.level));
@@ -99,19 +114,26 @@ function CompanionInfoCard({ state, onPress }: { state: CompanionState; onPress:
       </View>
 
       {/* Description */}
-      <Text style={styles.cardDescription}>{def.description}</Text>
+      <Text style={[styles.cardDescription, locked && { opacity: 0.5 }]}>{def.description}</Text>
 
       {/* Divider */}
       <View style={[styles.divider, { backgroundColor: isActive ? stage.primaryColor + '33' : Colors.border }]} />
 
-      {/* Level + XP row */}
-      <View style={styles.progressRow}>
-        <Text style={[styles.levelBadge, { color: stage.primaryColor }]}>LV {state.level}</Text>
-        <View style={styles.xpTrack}>
-          <View style={[styles.xpFill, { width: `${xpPercent * 100}%`, backgroundColor: stage.primaryColor }]} />
+      {/* Level + XP row (or lock message) */}
+      {locked ? (
+        <View style={styles.lockedRow}>
+          <Text style={styles.lockIcon}>{'\uD83D\uDD12'}</Text>
+          <Text style={styles.lockedText}>Unlock to train {def.trainingFocus}</Text>
         </View>
-        <Text style={styles.xpLabel}>{state.xp} / {xpForLevel(state.level)} XP</Text>
-      </View>
+      ) : (
+        <View style={styles.progressRow}>
+          <Text style={[styles.levelBadge, { color: stage.primaryColor }]}>LV {state.level}</Text>
+          <View style={styles.xpTrack}>
+            <View style={[styles.xpFill, { width: `${xpPercent * 100}%`, backgroundColor: stage.primaryColor }]} />
+          </View>
+          <Text style={styles.xpLabel}>{state.xp} / {xpForLevel(state.level)} XP</Text>
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -338,5 +360,31 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '500',
     color: Colors.textSecondary,
+  },
+  lockedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  lockIcon: {
+    fontSize: 12,
+  },
+  lockedText: {
+    fontSize: FontSize.label,
+    color: Colors.textTertiary,
+    fontStyle: 'italic',
+  },
+  upgradeHint: {
+    marginTop: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: Spacing.cardRadius,
+    backgroundColor: Colors.accent,
+  },
+  upgradeHintText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
   },
 });
