@@ -108,10 +108,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
       // Record the failed round so the engine learns from it (mutationSurvived: false,
       // reduced accuracy) before building the recovery round.
       const { engine: failedEngine } = applyFailedRound(state);
-      // Suppress sequence growth for this recovery round only.
+      // Recovery: shrink sequence by 2, slow flash by 60ms, widen gap by 30ms,
+      // and disable mutations. This gives real cognitive relief, not just a retry
+      // at the same difficulty with a different sequence.
       const recoveryEngine = {
         ...failedEngine,
-        levers: { ...failedEngine.levers, sequenceGrowth: 0 },
+        levers: {
+          ...failedEngine.levers,
+          sequenceGrowth: -2,
+          mutationRate: 0,
+        },
+        currentFlashDuration: Math.min(
+          failedEngine.config.flashCeiling,
+          failedEngine.currentFlashDuration + 60
+        ),
+        currentFlashGap: Math.min(
+          failedEngine.config.flashGapCeiling,
+          failedEngine.currentFlashGap + 30
+        ),
       };
       const rebuiltState: GameState = {
         ...state,
@@ -121,7 +135,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
       };
       const newRound = buildRound(rebuiltState);
       set({
-        engine: failedEngine,  // persist adaptive levers without the sequenceGrowth: 0 override
+        engine: {
+          ...failedEngine,
+          // Persist the slowed flash/gap so the next adaptive round starts from the
+          // recovery baseline, not the pre-failure difficulty
+          currentFlashDuration: recoveryEngine.currentFlashDuration,
+          currentFlashGap: recoveryEngine.currentFlashGap,
+        },
         lives: state.lives - 1,
         roundCount: rebuiltState.roundCount,
         recallProgress: [],
