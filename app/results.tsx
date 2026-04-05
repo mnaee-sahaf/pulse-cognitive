@@ -28,6 +28,7 @@ import { getLifetimeStats } from '../db/sessions';
 import { Companion } from '../components/Companion';
 import { LevelUpModal } from '../components/LevelUpModal';
 import { UpgradePrompt } from '../components/UpgradePrompt';
+import { ShareableSnapshot } from '../components/ShareableSnapshot';
 import type { GameMode } from '../engine/gameStateMachine';
 
 // Which cognitive dimensions each mode actively trains
@@ -248,6 +249,17 @@ export default function ResultsScreen() {
             )}
           </View>
         )}
+
+        {/* Shareable snapshot */}
+        <ShareableSnapshot
+          totalScore={totalScore}
+          roundsCompleted={roundsCompleted}
+          accuracy={accuracy}
+          avgRt={avgRt}
+          cognitiveScores={cognitiveScores}
+          engineIntensity={summary.engineIntensity}
+          streak={streak?.currentStreak}
+        />
 
         {/* CTAs */}
         <View style={styles.ctaGroup}>
