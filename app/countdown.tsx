@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -6,7 +6,6 @@ import Animated, {
   withSequence,
   withTiming,
   withSpring,
-  runOnJS,
 } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useGameStore } from '../store/gameStore';
@@ -16,11 +15,15 @@ import { loadEngineConfig } from '../db/engineConfig';
 import { loadAppSettings } from '../db/appSettings';
 import { loadCompanion } from '../db/companion';
 import type { GameMode } from '../engine/gameStateMachine';
+import { GameExplainer } from '../components/GameExplainer';
 
 export default function CountdownScreen() {
   const router = useRouter();
   const startSession = useGameStore((s) => s.startSession);
   const [count, setCount] = useState(3);
+  const [showExplainer, setShowExplainer] = useState(true);
+  const [gameMode, setGameMode] = useState<GameMode>('arc');
+  const sessionStarted = useRef(false);
   const scale = useSharedValue(0.5);
   const opacity = useSharedValue(0);
 
@@ -29,15 +32,38 @@ export default function CountdownScreen() {
     opacity: opacity.value,
   }));
 
+  // Load session data on mount, but wait for explainer dismissal to start countdown
   useEffect(() => {
     Promise.all([loadPlayerProfile(), loadEngineConfig(), loadAppSettings(), loadCompanion()])
       .then(([profile, config, appSettings, companion]) => {
-        const gameMode = (companion?.companionId ?? 'arc') as GameMode;
-        startSession(profile, config, appSettings.lives, gameMode);
+        const mode = (companion?.companionId ?? 'arc') as GameMode;
+        setGameMode(mode);
+        // Stash session params for later — start session when explainer is dismissed
+        sessionStarted.current = false;
+        startSessionRef.current = () => {
+          if (!sessionStarted.current) {
+            sessionStarted.current = true;
+            startSession(profile, config, appSettings.lives, mode);
+          }
+        };
       })
-      .catch(() => startSession(null));
-    animateTick(3);
+      .catch(() => {
+        startSessionRef.current = () => {
+          if (!sessionStarted.current) {
+            sessionStarted.current = true;
+            startSession(null);
+          }
+        };
+      });
   }, []);
+
+  const startSessionRef = useRef<() => void>(() => {});
+
+  function handleDismissExplainer() {
+    setShowExplainer(false);
+    startSessionRef.current();
+    animateTick(3);
+  }
 
   function animateTick(n: number) {
     setCount(n);
@@ -60,6 +86,10 @@ export default function CountdownScreen() {
         }, 220);
       }, 700);
     }
+  }
+
+  if (showExplainer) {
+    return <GameExplainer gameMode={gameMode} onDismiss={handleDismissExplainer} />;
   }
 
   return (
