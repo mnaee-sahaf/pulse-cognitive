@@ -21,6 +21,9 @@ export interface EngineConfig {
   // Branch: push tempo only (accuracy > zpdUpper AND RT > rtSlowThreshold)
   pushTempoRamp: number;        // ms delta for tempo-only push (default: -20)
 
+  // Branch: steady push (accuracy > zpdUpper AND RT between fast/slow thresholds)
+  steadyPushTempoRamp: number;  // moderate tempo push (default: -15)
+
   // Branch: ease back (accuracy < overwhelmThreshold)
   easeTempoRamp: number;        // positive = slows down (default: 40)
 
@@ -46,6 +49,7 @@ export const ENGINE_CONFIG_DEFAULTS: EngineConfig = {
   accelTempoRamp: -30,
   accelGrowth: 2,
   pushTempoRamp: -20,
+  steadyPushTempoRamp: -15,
   easeTempoRamp: 40,
   defaultTempoRamp: -10,
   gridExpand3to4Round: 6,

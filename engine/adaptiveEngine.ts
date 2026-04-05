@@ -135,6 +135,12 @@ export function updateEngine(
       // Memory fine, speed lagging — push tempo only
       levers.sequenceGrowth = 1;
       levers.tempoRamp = cfg.pushTempoRamp;
+    } else if (accuracy > cfg.zpdUpper) {
+      // Accuracy excellent, RT moderate (between fast and slow thresholds)
+      // — steady push across axes without full acceleration
+      levers.sequenceGrowth = 1;
+      levers.tempoRamp = cfg.steadyPushTempoRamp;
+      levers.mutationRate = clampMutationRate(levers.mutationRate + 0.08);
     } else if (accuracy >= cfg.overwhelmThreshold && accuracy <= cfg.zpdUpper) {
       // Target ZPD — hold steady, don't grow sequence
       levers.sequenceGrowth = 0;
