@@ -23,6 +23,8 @@ import { saveSession, getProfileSeedData } from '../db/sessions';
 import { updatePlayerProfile } from '../db/playerProfile';
 import { awardXp, loadCompanion, scoreToXp, type CompanionState } from '../db/companion';
 import { loadPurchaseState, type PurchaseState } from '../db/purchaseState';
+import { recordSessionForStreak, getStreakMilestone, getStreakLabel, type StreakState } from '../db/streaks';
+import { getLifetimeStats } from '../db/sessions';
 import { Companion } from '../components/Companion';
 import { LevelUpModal } from '../components/LevelUpModal';
 import { UpgradePrompt } from '../components/UpgradePrompt';
@@ -34,6 +36,36 @@ const MODE_ACTIVE_DIMS: Record<GameMode, Set<string>> = {
   tide: new Set(['Flexibility', 'Decision Speed']),
   ember: new Set(['Reaction Speed', 'Decision Speed']),
 };
+
+function buildNudge(
+  sessionCount: number,
+  streak: StreakState,
+  companionLevel: number
+): string | null {
+  // Milestone nudges (highest priority first)
+  const milestone = getStreakMilestone(streak.currentStreak);
+  if (milestone === 7) {
+    return '7 days straight — you\'re serious about this. Unlock full training for $7.99.';
+  }
+  if (companionLevel === 10) {
+    return 'Your companion reached Level 10! The other companions are waiting.';
+  }
+  // Session-count nudges
+  if (sessionCount === 3) {
+    return 'Your brain is warming up. Unlock all 3 training modes to build a complete profile.';
+  }
+  if (sessionCount === 5) {
+    return 'You\'ve completed 5 sessions! Complete cognitive training requires all 3 modes.';
+  }
+  if (sessionCount === 10) {
+    return '10 sessions in — you\'re committed. Train the whole brain for $7.99.';
+  }
+  // Every 10th session after that
+  if (sessionCount > 10 && sessionCount % 10 === 0) {
+    return `${sessionCount} sessions and counting. Unlock everything for just $7.99.`;
+  }
+  return null;
+}
 
 export default function ResultsScreen() {
   const router = useRouter();
@@ -48,6 +80,9 @@ export default function ResultsScreen() {
   const [leveledUp, setLeveledUp] = useState(false);
   const [evolved, setEvolved] = useState(false);
   const [showLevelUpModal, setShowLevelUpModal] = useState(false);
+  const [streak, setStreak] = useState<StreakState | null>(null);
+  const [nudgeText, setNudgeText] = useState<string | null>(null);
+  const [sessionCount, setSessionCount] = useState(0);
 
   // Persist session and award XP once on mount
   useEffect(() => {
@@ -68,6 +103,20 @@ export default function ResultsScreen() {
 
       const ps = await loadPurchaseState();
       setPurchaseState(ps);
+
+      // Record streak
+      const streakResult = await recordSessionForStreak();
+      setStreak(streakResult);
+
+      // Get session count for nudge triggers
+      const stats = await getLifetimeStats();
+      setSessionCount(stats.sessionCount);
+
+      // Build contextual nudge (only for free users)
+      if (ps && !ps.fullUnlock) {
+        const nudge = buildNudge(stats.sessionCount, streakResult, result.state.level);
+        setNudgeText(nudge);
+      }
     };
     persist().catch(console.error);
   }, []);
@@ -158,6 +207,27 @@ export default function ResultsScreen() {
             <Text style={styles.engineVal}>{summary.mutationsSurvived}</Text>
           </View>
         </View>
+
+        {/* Streak */}
+        {streak && streak.currentStreak > 0 && (
+          <View style={styles.streakCard}>
+            <Text style={styles.streakIcon}>{streak.currentStreak >= 7 ? '\uD83D\uDD25' : '\u26A1'}</Text>
+            <Text style={styles.streakText}>
+              {streak.currentStreak} day streak
+              {getStreakLabel(streak.currentStreak) ? ` \u2014 ${getStreakLabel(streak.currentStreak)}` : ''}
+            </Text>
+          </View>
+        )}
+
+        {/* Upgrade nudge */}
+        {nudgeText && (
+          <Pressable
+            style={({ pressed }) => [styles.nudgeCard, pressed && { opacity: 0.8 }]}
+            onPress={() => setUpgradeVisible(true)}
+          >
+            <Text style={styles.nudgeText}>{nudgeText}</Text>
+          </Pressable>
+        )}
 
         {/* Companion XP */}
         {companion && (
@@ -418,6 +488,39 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.textPrimary,
     fontFamily: 'serif',
+  },
+  streakCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: Colors.warning + '44',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    alignSelf: 'stretch',
+  },
+  streakIcon: { fontSize: 18 },
+  streakText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  nudgeCard: {
+    backgroundColor: Colors.accentSoft,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.accent + '33',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    alignSelf: 'stretch',
+  },
+  nudgeText: {
+    fontSize: 13,
+    color: Colors.accent,
+    lineHeight: 18,
+    textAlign: 'center',
   },
   ctaGroup: { gap: 12 },
   companionCard: {
