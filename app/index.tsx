@@ -153,6 +153,12 @@ export default function HomeScreen() {
               <Text style={styles.secondaryBtnText}>History</Text>
             </Pressable>
             <Pressable
+              style={({ pressed }) => [styles.secondaryBtn, { flex: 1 }, pressed && styles.ctaPressed]}
+              onPress={() => router.push('/weekly-report')}
+            >
+              <Text style={styles.secondaryBtnText}>Weekly</Text>
+            </Pressable>
+            <Pressable
               style={({ pressed }) => [styles.secondaryBtn, styles.settingsBtn, pressed && styles.ctaPressed]}
               onPress={() => router.push('/settings')}
             >
