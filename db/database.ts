@@ -48,6 +48,7 @@ export async function resetAllData(): Promise<void> {
     DELETE FROM player_profile;
     DELETE FROM engine_config;
     DELETE FROM app_settings;
+    DELETE FROM purchase_state;
   `);
 }
 
@@ -154,6 +155,12 @@ async function migrate(db: SQLite.SQLiteDatabase) {
       lives INTEGER NOT NULL DEFAULT 3,
       green_tile_feedback INTEGER NOT NULL DEFAULT 1,
       haptic_feedback INTEGER NOT NULL DEFAULT 1
+    );
+
+    CREATE TABLE IF NOT EXISTS purchase_state (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      free_companion_id TEXT NOT NULL DEFAULT 'arc',
+      full_unlock INTEGER NOT NULL DEFAULT 0
     );
   `);
 }
