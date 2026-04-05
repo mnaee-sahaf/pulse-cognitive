@@ -134,9 +134,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       // Record the failed round so the engine learns from it (mutationSurvived: false,
       // reduced accuracy) before building the recovery round.
       const { engine: failedEngine } = applyFailedRound(state);
-      // Recovery: shrink sequence by 2, slow flash by 60ms, widen gap by 30ms,
-      // and disable mutations. This gives real cognitive relief, not just a retry
-      // at the same difficulty with a different sequence.
+      // Recovery: shrink sequence by 2, slow flash moderately, widen gap,
+      // and disable mutations. Flash easing is capped — don't slow beyond
+      // 700ms to avoid sluggish recovery rounds that bore the player.
+      const flashRecoveryMax = Math.min(failedEngine.config.flashCeiling, 700);
       const recoveryEngine = {
         ...failedEngine,
         levers: {
@@ -145,7 +146,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           mutationRate: 0,
         },
         currentFlashDuration: Math.min(
-          failedEngine.config.flashCeiling,
+          flashRecoveryMax,
           failedEngine.currentFlashDuration + 60
         ),
         currentFlashGap: Math.min(

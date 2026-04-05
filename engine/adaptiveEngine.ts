@@ -234,11 +234,26 @@ export function updateEngine(
         }
       }
     } else if (accuracy < cfg.overwhelmThreshold) {
-      branch = 'overwhelm';
-      levers.sequenceGrowth = accuracy < cfg.overwhelmThreshold - 0.15 ? -2 : -1;
-      levers.tempoRamp = cfg.easeTempoRamp;
-      levers.flashGapDelta = 20;
-      levers.mutationRate = clampMutationRate(levers.mutationRate - 0.15);
+      // Check if the player is recovering: last round was perfect at a short sequence.
+      // If so, the low rolling accuracy is just the failed round dragging the window —
+      // don't keep easing, ramp back up instead.
+      const lastAcc = roundPerf.total === 0 ? 1 : roundPerf.correct / roundPerf.total;
+      const isRecovering = lastAcc >= 0.95 && roundPerf.total <= 3;
+
+      if (isRecovering) {
+        branch = 'overwhelm-recovery';
+        // Player is acing easy rounds — push back toward their level
+        levers.sequenceGrowth = 1;
+        levers.tempoRamp = cfg.steadyPushTempoRamp;
+        levers.flashGapDelta = -5;
+        // Don't touch mutationRate — let it recover naturally
+      } else {
+        branch = 'overwhelm';
+        levers.sequenceGrowth = accuracy < cfg.overwhelmThreshold - 0.15 ? -2 : -1;
+        levers.tempoRamp = cfg.easeTempoRamp;
+        levers.flashGapDelta = 20;
+        levers.mutationRate = clampMutationRate(levers.mutationRate - 0.15);
+      }
     }
 
     // Reset plateau counter when leaving ZPD zone
