@@ -102,15 +102,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const state = get();
     if (!state.round) return;
     const total = state.round.displaySequence.length;
-    const allHit = state.emberHits >= total;
+    const hits = state.emberHits;
+    const allHit = hits >= total;
 
     if (allHit) {
-      log.phase('ember sequence complete → feedback', { hits: state.emberHits, total });
-      set({ phase: 'feedback' });
+      log.phase('ember sequence complete → feedback', { hits, total });
+      // Count all hits as correct for accuracy tracking
+      set({
+        phase: 'feedback',
+        sessionCorrect: state.sessionCorrect + hits,
+        sessionTotal: state.sessionTotal + total,
+      });
     } else {
-      const missCount = total - state.emberHits;
-      log.phase('ember sequence missed → loseLife', { hits: state.emberHits, total, missCount, lives: state.lives });
-      set({ sessionTotal: state.sessionTotal + missCount });
+      const missCount = total - hits;
+      log.phase('ember sequence missed → loseLife', { hits, total, missCount, lives: state.lives });
+      // Count hits as correct, total sequence as attempted
+      set({
+        sessionCorrect: state.sessionCorrect + hits,
+        sessionTotal: state.sessionTotal + total,
+      });
       get().loseLife();
     }
   },
