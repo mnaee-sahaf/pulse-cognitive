@@ -22,16 +22,28 @@ import { useAppSettings } from '../store/appSettingsStore';
 import { saveSession, getProfileSeedData } from '../db/sessions';
 import { updatePlayerProfile } from '../db/playerProfile';
 import { awardXp, loadCompanion, scoreToXp, type CompanionState } from '../db/companion';
+import { loadPurchaseState, type PurchaseState } from '../db/purchaseState';
 import { Companion } from '../components/Companion';
 import { LevelUpModal } from '../components/LevelUpModal';
+import { UpgradePrompt } from '../components/UpgradePrompt';
+import type { GameMode } from '../engine/gameStateMachine';
+
+// Which cognitive dimensions each mode actively trains
+const MODE_ACTIVE_DIMS: Record<GameMode, Set<string>> = {
+  arc: new Set(['Working Memory', 'Decision Speed']),
+  tide: new Set(['Flexibility', 'Decision Speed']),
+  ember: new Set(['Reaction Speed', 'Decision Speed']),
+};
 
 export default function ResultsScreen() {
   const router = useRouter();
-  const { summary, engine, resetSession } = useGameStore();
+  const { summary, engine, resetSession, gameMode } = useGameStore();
   const animatedBackground = useAppSettings((s) => s.animatedBackground);
   const backgroundIntensity = useAppSettings((s) => s.backgroundIntensity);
   const savedRef = useRef(false);
   const [companion, setCompanion] = useState<CompanionState | null>(null);
+  const [purchaseState, setPurchaseState] = useState<PurchaseState | null>(null);
+  const [upgradeVisible, setUpgradeVisible] = useState(false);
   const [xpGained, setXpGained] = useState(0);
   const [leveledUp, setLeveledUp] = useState(false);
   const [evolved, setEvolved] = useState(false);
@@ -53,6 +65,9 @@ export default function ResultsScreen() {
       setLeveledUp(result.leveledUp);
       setEvolved(result.evolved);
       if (result.leveledUp) setShowLevelUpModal(true);
+
+      const ps = await loadPurchaseState();
+      setPurchaseState(ps);
     };
     persist().catch(console.error);
   }, []);
@@ -64,12 +79,18 @@ export default function ResultsScreen() {
 
   const { cognitiveScores, totalScore, roundsCompleted, avgRt, bestRt, accuracy } = summary;
 
+  const activeDims = MODE_ACTIVE_DIMS[gameMode] ?? MODE_ACTIVE_DIMS.arc;
+  const isFullUnlock = purchaseState?.fullUnlock ?? false;
+
   const metrics = [
     { label: 'Reaction Speed', score: cognitiveScores.rtScore, color: Colors.accent },
     { label: 'Working Memory', score: cognitiveScores.wmScore, color: '#8B5CF6' },
     { label: 'Flexibility', score: cognitiveScores.flexScore, color: Colors.warning },
     { label: 'Decision Speed', score: cognitiveScores.decisionScore, color: Colors.success },
-  ];
+  ].map((m) => ({
+    ...m,
+    locked: !isFullUnlock && !activeDims.has(m.label),
+  }));
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -97,8 +118,26 @@ export default function ResultsScreen() {
         <View style={styles.profileSection}>
           <Text style={styles.sectionLabel}>COGNITIVE PROFILE</Text>
           {metrics.map((m, i) => (
-            <MetricBar key={m.label} {...m} delay={i * 100} />
+            <MetricBar
+              key={m.label}
+              label={m.label}
+              score={m.score}
+              color={m.color}
+              delay={i * 100}
+              locked={m.locked}
+              onLockedTap={() => setUpgradeVisible(true)}
+            />
           ))}
+          {metrics.some((m) => m.locked) && (
+            <Pressable
+              onPress={() => setUpgradeVisible(true)}
+              style={({ pressed }) => [styles.profileNudge, pressed && { opacity: 0.7 }]}
+            >
+              <Text style={styles.profileNudgeText}>
+                Unlock all training modes to build a complete profile
+              </Text>
+            </Pressable>
+          )}
         </View>
 
         {/* Engine report */}
@@ -168,6 +207,18 @@ export default function ResultsScreen() {
           onDismiss={() => setShowLevelUpModal(false)}
         />
       )}
+
+      {purchaseState && (
+        <UpgradePrompt
+          visible={upgradeVisible}
+          freeCompanionId={purchaseState.freeCompanionId}
+          onPurchase={() => {
+            // TODO: wire up IAP
+            setUpgradeVisible(false);
+          }}
+          onDismiss={() => setUpgradeVisible(false)}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -186,40 +237,63 @@ function MetricBar({
   score,
   color,
   delay,
+  locked = false,
+  onLockedTap,
 }: {
   label: string;
   score: number;
   color: string;
   delay: number;
+  locked?: boolean;
+  onLockedTap?: () => void;
 }) {
   const width = useSharedValue(0);
 
   useEffect(() => {
-    width.value = withDelay(
-      delay,
-      withTiming(score, {
-        duration: 800,
-        easing: Easing.bezier(0.22, 1, 0.36, 1),
-      })
-    );
-  }, []);
+    if (!locked) {
+      width.value = withDelay(
+        delay,
+        withTiming(score, {
+          duration: 800,
+          easing: Easing.bezier(0.22, 1, 0.36, 1),
+        })
+      );
+    }
+  }, [locked]);
 
   const barStyle = useAnimatedStyle(() => ({
     width: `${width.value}%`,
-    backgroundColor: color,
+    backgroundColor: locked ? Colors.border : color,
   }));
 
-  return (
-    <View style={styles.metricRow}>
+  const content = (
+    <View style={[styles.metricRow, locked && { opacity: 0.5 }]}>
       <View style={styles.metricLabelRow}>
-        <Text style={styles.metricName}>{label}</Text>
-        <Text style={[styles.metricScore, { color }]}>{score}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          {locked && <Text style={{ fontSize: 11 }}>{'\uD83D\uDD12'}</Text>}
+          <Text style={styles.metricName}>{label}</Text>
+        </View>
+        {locked ? (
+          <Text style={[styles.metricScore, { color: Colors.textTertiary, fontSize: 11 }]}>LOCKED</Text>
+        ) : (
+          <Text style={[styles.metricScore, { color }]}>{score}</Text>
+        )}
       </View>
       <View style={styles.barTrack}>
         <Animated.View style={[styles.barFill, barStyle]} />
       </View>
     </View>
   );
+
+  if (locked && onLockedTap) {
+    return (
+      <Pressable onPress={onLockedTap}>
+        {content}
+      </Pressable>
+    );
+  }
+
+  return content;
 }
 
 const styles = StyleSheet.create({
@@ -310,6 +384,17 @@ const styles = StyleSheet.create({
   barFill: {
     height: '100%',
     borderRadius: 2,
+  },
+  profileNudge: {
+    marginTop: 4,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  profileNudgeText: {
+    fontSize: 12,
+    color: Colors.accent,
+    fontWeight: '500',
+    letterSpacing: 0.3,
   },
   engineCard: {
     backgroundColor: Colors.surface,
