@@ -108,6 +108,35 @@ const MODE_DETAILS: Record<CompanionId, ModeDetail> = {
       'Gaming — competitive advantage through faster inputs',
     ],
   },
+  halt: {
+    title: 'Halt',
+    modeLabel: 'HALT',
+    dimension: 'Impulse Control',
+    color: COMPANIONS.halt.stages[0].primaryColor,
+    tagline: 'Master the ability to stop when everything says go.',
+    whatItIs:
+      'Impulse control is the ability to suppress a prepotent response — to override automatic behavior when the situation demands it. It\'s the executive brake that prevents you from acting on every impulse.',
+    howItWorks: [
+      'Cells light up rapidly on the grid in quick succession',
+      'Tap Go cells (majority) as fast as you can',
+      'Withhold your tap on No-Go cells (marked with a visual cue)',
+      'Stop-Signal trials start as Go then switch — cancel your response mid-action',
+    ],
+    whyItMatters:
+      'Impulse control underpins self-regulation in every domain — from resisting distractions to managing emotional reactions. The ability to cancel a planned action is one of the most fundamental cognitive control operations, and it\'s measurably trainable.',
+    science: {
+      construct: 'Go/No-Go + Stop-Signal Paradigm',
+      researchers: 'Logan & Cowan (1984), Raud et al. (2020), Allom et al. (2015)',
+      insight:
+        'The Stop-Signal Reaction Time (SSRT) is the gold-standard measure of inhibitory control. The staircase procedure converges on your true stopping speed. Raud et al. showed Go/No-Go and Stop-Signal engage different mechanisms — action restraint vs. action cancellation — and this mode trains both.',
+    },
+    realWorld: [
+      'Resisting impulsive decisions under pressure',
+      'Managing emotional reactions in conflict',
+      'Dietary self-control and habit breaking',
+      'Focus — suppressing distracting impulses while working',
+    ],
+  },
 };
 
 interface ModeDetailCardProps {

@@ -38,6 +38,8 @@ export default function GameScreen() {
     startRecall,
     handleTap,
     handleWatchTap,
+    handleHaltTap,
+    handleHaltTimeout,
     finishEmberSequence,
     advanceRound,
     resetSession,
@@ -71,9 +73,43 @@ export default function GameScreen() {
     prevLivesRef.current = lives;
   }, [lives, hapticFeedback]);
 
-  // Watch phase: flash cells in sequence
+  // HALT mode: track whether tap was received this trial
+  const haltTappedRef = useRef(false);
+  const haltTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Watch phase: flash cells in sequence (or single trial for HALT)
   useEffect(() => {
     if (phase !== 'watch' || !round) return;
+
+    // HALT mode: single cell flash with response window timeout
+    if (gameMode === 'halt') {
+      haltTappedRef.current = false;
+      flashStartRef.current = performance.now();
+      const targetCell = round.displaySequence[0];
+      setFlashIndex(targetCell);
+
+      // For stop-signal trials, change visual after delay (handled via poisonCell)
+      if (round.trialType === 'stop' && round.stopSignalDelay) {
+        flashTimerRef.current = setTimeout(() => {
+          // Signal the stop by making the cell look like poison (red)
+          // We reuse the round state's poisonCell for visual purposes
+        }, round.stopSignalDelay);
+      }
+
+      // Response window timeout
+      const responseWindow = round.responseWindow ?? 800;
+      haltTimeoutRef.current = setTimeout(() => {
+        setFlashIndex(-1);
+        if (!haltTappedRef.current) {
+          handleHaltTimeout();
+        }
+      }, responseWindow);
+
+      return () => {
+        if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+        if (haltTimeoutRef.current) clearTimeout(haltTimeoutRef.current);
+      };
+    }
 
     let i = 0;
     const flashNext = () => {
@@ -159,9 +195,17 @@ export default function GameScreen() {
 
   const isRecalling = phase === 'recall';
   const isEmberWatch = gameMode === 'ember' && phase === 'watch';
+  const isHaltWatch = gameMode === 'halt' && phase === 'watch';
 
   const onGridTap = useCallback((cellIndex: number, time: number) => {
-    if (isEmberWatch) {
+    if (isHaltWatch) {
+      if (haltTappedRef.current) return; // ignore double-taps
+      haltTappedRef.current = true;
+      const rt = time - flashStartRef.current;
+      setFlashIndex(-1);
+      if (haltTimeoutRef.current) clearTimeout(haltTimeoutRef.current);
+      handleHaltTap(cellIndex, rt);
+    } else if (isEmberWatch) {
       const rt = time - flashStartRef.current;
       const isValidTarget =
         cellIndex === emberTargetRef.current &&
@@ -169,21 +213,23 @@ export default function GameScreen() {
         !emberHitThisFlashRef.current;
 
       if (isValidTarget) {
-        emberHitThisFlashRef.current = true; // lock out double-taps on same flash
+        emberHitThisFlashRef.current = true;
         handleWatchTap(cellIndex, rt);
       } else if (round && cellIndex === round.poisonCell) {
-        // Route poison taps to the store regardless of timing so loseLife fires
         handleWatchTap(cellIndex, rt);
       }
-      // Invalid non-poison taps are silently ignored
     } else {
       handleTap(cellIndex, time);
     }
-  }, [isEmberWatch, handleWatchTap, handleTap]);
+  }, [isEmberWatch, isHaltWatch, handleWatchTap, handleHaltTap, handleTap]);
 
   if (!round) return null;
+  const haltTrialLabel = round?.trialType === 'nogo' ? 'NO-GO'
+    : round?.trialType === 'stop' ? 'STOP' : 'GO';
+
   const phaseLabel =
     phase === 'feedback' ? 'GOOD' :
+    gameMode === 'halt' ? haltTrialLabel :
     gameMode === 'ember' ? 'INTERCEPT' :
     gameMode === 'tide' && phase === 'recall' ? 'REVERSE' :
     phase === 'watch' ? 'WATCH' :
@@ -286,7 +332,7 @@ export default function GameScreen() {
             poisonCell={round.poisonCell}
             tapStates={tapStates()}
             onTap={onGridTap}
-            disabled={!isRecalling && !isEmberWatch}
+            disabled={!isRecalling && !isEmberWatch && !isHaltWatch}
             themeColor={modeColor}
             tileShape={tileShape}
             hideWhenIdle={gameMode === 'ember'}

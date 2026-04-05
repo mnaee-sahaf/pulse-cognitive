@@ -69,6 +69,10 @@ async function migrate(db: SQLite.SQLiteDatabase) {
   await db.execAsync(`ALTER TABLE app_settings ADD COLUMN green_tile_feedback INTEGER NOT NULL DEFAULT 1`).catch(() => {});
   await db.execAsync(`ALTER TABLE app_settings ADD COLUMN haptic_feedback INTEGER NOT NULL DEFAULT 1`).catch(() => {});
 
+  // Phase 1 redesign migrations
+  await db.execAsync(`ALTER TABLE sessions ADD COLUMN game_mode TEXT NOT NULL DEFAULT 'arc'`).catch(() => {});
+  await db.execAsync(`ALTER TABLE sessions ADD COLUMN impulse_score REAL NOT NULL DEFAULT 50`).catch(() => {});
+
   // Migrate existing single-companion row into companion_levels (idempotent)
   const oldCompanion = await db.getFirstAsync<{ companion_id: string; level: number; xp: number }>(
     `SELECT companion_id, level, xp FROM companion WHERE id = 1`
@@ -83,7 +87,7 @@ async function migrate(db: SQLite.SQLiteDatabase) {
     // Only seed if companion_levels is empty
     const existingCount = await db.getFirstAsync<{ c: number }>(`SELECT COUNT(*) as c FROM companion_levels`).catch(() => null);
     if (!existingCount || existingCount.c === 0) {
-      const companionIds = ['arc', 'tide', 'ember'];
+      const companionIds = ['arc', 'tide', 'ember', 'halt'];
       for (const id of companionIds) {
         const isActive = id === oldCompanion.companion_id ? 1 : 0;
         const level = id === oldCompanion.companion_id ? oldCompanion.level : 5;

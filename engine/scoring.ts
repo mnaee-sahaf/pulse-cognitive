@@ -32,10 +32,19 @@ export function calcRoundScore(input: RoundScoreInput): number {
 }
 
 export interface CognitiveScores {
-  rtScore: number;       // 0–100 reaction speed
+  rtScore: number;       // 0–100 processing speed
   wmScore: number;       // 0–100 working memory
   flexScore: number;     // 0–100 cognitive flexibility
-  decisionScore: number; // 0–100 decision speed (accuracy at peak tempo)
+  decisionScore: number; // 0–100 decision efficiency
+  impulseScore: number;  // 0–100 impulse control (HALT mode)
+}
+
+/** HALT mode data passed into cognitive scoring */
+export interface HaltMetrics {
+  ssrt: number;
+  dPrime: number;
+  commissionErrors: number;
+  totalTrials: number;
 }
 
 /**
@@ -46,7 +55,8 @@ export function calcCognitiveScores(
   maxSequenceReached: number,
   mutationsFaced: number,
   mutationsSurvived: number,
-  accuracyAtPeakTempo: number // 0.0–1.0
+  accuracyAtPeakTempo: number, // 0.0–1.0
+  haltMetrics?: HaltMetrics
 ): CognitiveScores {
   // RT score: 200ms = 100, 800ms = 0
   const avgRt = allRts.length > 0
@@ -65,5 +75,15 @@ export function calcCognitiveScores(
   // Decision score: accuracy at peak tempo
   const decisionScore = Math.round(accuracyAtPeakTempo * 100);
 
-  return { rtScore, wmScore, flexScore, decisionScore };
+  // Impulse control score: based on SSRT and d-prime (HALT mode only)
+  let impulseScore = 50; // neutral default for non-HALT modes
+  if (haltMetrics && haltMetrics.totalTrials > 0) {
+    const ssrtScore = Math.max(0, Math.min(100, Math.round(((400 - haltMetrics.ssrt) / 300) * 100)));
+    const dPrimeScore = Math.max(0, Math.min(100, Math.round((haltMetrics.dPrime / 4) * 100)));
+    const errorRate = haltMetrics.commissionErrors / haltMetrics.totalTrials;
+    const errorPenalty = Math.max(0, 1 - errorRate * 2);
+    impulseScore = Math.round((ssrtScore * 0.5 + dPrimeScore * 0.3) * errorPenalty + dPrimeScore * 0.2);
+  }
+
+  return { rtScore, wmScore, flexScore, decisionScore, impulseScore };
 }

@@ -16,10 +16,11 @@ const DIMENSION_MAP: Record<CompanionId, string> = {
   arc: 'Working Memory',
   tide: 'Cognitive Flexibility',
   ember: 'Reaction Speed',
+  halt: 'Impulse Control',
 };
 
 export function UpgradePrompt({ visible, freeCompanionId, onPurchase, onDismiss }: UpgradePromptProps) {
-  const companionIds: CompanionId[] = ['arc', 'tide', 'ember'];
+  const companionIds: CompanionId[] = ['arc', 'tide', 'ember', 'halt'];
   const [detailMode, setDetailMode] = useState<CompanionId | null>(null);
 
   return (

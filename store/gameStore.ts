@@ -6,10 +6,13 @@ import {
   completeRound,
   buildSummary,
   applyFailedRound,
+  processHaltTap,
+  processHaltTimeout,
   type GameState,
   type GameMode,
   type TapResult,
 } from '../engine/gameStateMachine';
+import { updateEngine } from '../engine/adaptiveEngine';
 import type { PlayerProfile } from '../engine/adaptiveEngine';
 import { ENGINE_CONFIG_DEFAULTS, type EngineConfig } from '../engine/engineConfig';
 import { log } from '../lib/devLog';
@@ -22,6 +25,9 @@ interface GameStore extends GameState {
   startRecall: (watchEndTime: number) => void;
   handleTap: (cellIndex: number, tapTime: number) => void;
   handleWatchTap: (cellIndex: number, rt: number) => void;
+  handleHaltTap: (cellIndex: number, rt: number) => void;
+  handleHaltTimeout: () => void;
+  advanceHaltTrial: () => void;
   finishEmberSequence: () => void;
   loseLife: () => void;
   advanceRound: () => void;
@@ -97,6 +103,80 @@ export const useGameStore = create<GameStore>((set, get) => ({
       tapResults: [...state.tapResults, hit],
       sessionRts: [...state.sessionRts, rt],
       emberHits: state.emberHits + 1,
+    });
+  },
+
+  handleHaltTap: (cellIndex, rt) => {
+    const state = get();
+    if (state.gameMode !== 'halt' || state.phase !== 'watch' || !state.round) return;
+
+    const { nextState, isError } = processHaltTap(state, cellIndex, rt);
+    log.tap(`halt ${state.round.trialType} tap`, { cellIndex, rt: Math.round(rt), isError });
+
+    if (isError) {
+      set(nextState as Partial<GameStore>);
+      get().loseLife();
+    } else {
+      set(nextState as Partial<GameStore>);
+      set({ phase: 'feedback' });
+    }
+  },
+
+  handleHaltTimeout: () => {
+    const state = get();
+    if (state.gameMode !== 'halt' || !state.round) return;
+
+    const { nextState, isError } = processHaltTimeout(state);
+    log.tap(`halt ${state.round.trialType} timeout`, { isError });
+
+    if (isError) {
+      set(nextState as Partial<GameStore>);
+      get().loseLife();
+    } else {
+      set(nextState as Partial<GameStore>);
+      set({ phase: 'feedback' });
+    }
+  },
+
+  advanceHaltTrial: () => {
+    const state = get();
+    if (state.gameMode !== 'halt') return;
+
+    // Update engine every 5 trials for smoother adaptation
+    let engine = state.engine;
+    if (state.haltTrialCount > 0 && state.haltTrialCount % 5 === 0) {
+      const roundPerf = {
+        correct: state.sessionCorrect,
+        total: Math.max(1, state.sessionTotal),
+        avgRt: state.haltGoRts.length > 0
+          ? state.haltGoRts[state.haltGoRts.length - 1]
+          : 400,
+        mutationSurvived: null as boolean | null,
+      };
+      engine = updateEngine(state.engine, roundPerf, state.roundCount);
+    }
+
+    const nextState: GameState = {
+      ...state,
+      engine,
+      roundCount: state.roundCount + 1,
+    };
+    const nextRound = buildRound(nextState);
+
+    log.phase(`halt trial ${state.haltTrialCount} → next`, {
+      trialType: nextRound.trialType,
+      flash: nextRound.flashDuration,
+      ssd: state.haltSsd,
+    });
+
+    set({
+      engine,
+      phase: 'watch',
+      round: nextRound,
+      roundCount: state.roundCount + 1,
+      currentFlashIndex: -1,
+      tapResults: [],
+      recallProgress: [],
     });
   },
 
@@ -195,6 +275,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
   advanceRound: () => {
     const state = get();
     if (state.phase !== 'feedback') return;
+
+    // HALT mode uses its own trial advancement
+    if (state.gameMode === 'halt') {
+      get().advanceHaltTrial();
+      return;
+    }
 
     const updates = completeRound(state);
     const merged = { ...state, ...updates };

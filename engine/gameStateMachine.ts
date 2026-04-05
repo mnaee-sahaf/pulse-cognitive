@@ -16,10 +16,13 @@ import {
 import { ENGINE_CONFIG_DEFAULTS, type EngineConfig } from './engineConfig';
 
 /** Each companion trains a different cognitive mode. */
-export type GameMode = 'arc' | 'tide' | 'ember';
+export type GameMode = 'arc' | 'tide' | 'ember' | 'halt';
 import { calcRoundScore, calcCognitiveScores, type CognitiveScores } from './scoring';
 
 export type GamePhase = 'idle' | 'watch' | 'recall' | 'feedback' | 'ended';
+
+/** HALT mode trial types */
+export type HaltTrialType = 'go' | 'nogo' | 'stop';
 
 export interface RoundState {
   round: number;
@@ -30,6 +33,10 @@ export interface RoundState {
   flashDuration: number; // ms per cell illumination
   flashGap: number;      // ms between cell flashes
   gridSize: GridSize;
+  // HALT mode fields
+  trialType?: HaltTrialType;
+  stopSignalDelay?: number;  // ms after stimulus onset before stop signal appears
+  responseWindow?: number;   // ms after flash onset to accept/expect response
 }
 
 export interface TapResult {
@@ -52,6 +59,11 @@ export interface SessionSummary {
   engineIntensity: number;
   cognitiveScores: CognitiveScores;
   bestStreak: number;
+  // HALT mode metrics
+  haltCommissionErrors: number;
+  haltOmissionErrors: number;
+  haltSsrt: number;       // estimated stop-signal reaction time (ms)
+  haltDPrime: number;      // signal detection d' (discriminability)
 }
 
 export interface GameState {
@@ -73,6 +85,14 @@ export interface GameState {
   gameMode: GameMode;
   emberHits: number;          // Ember mode: cells intercepted in current watch sequence
   perfectStreak: number;      // consecutive perfect rounds (no wrong taps) — resets on life loss
+  // HALT mode tracking
+  haltTrialCount: number;
+  haltCommissionErrors: number;  // tapped on NoGo/Stop trials
+  haltOmissionErrors: number;    // missed Go trials
+  haltCorrectGos: number;
+  haltCorrectStops: number;
+  haltSsd: number;               // current stop-signal delay (staircase, ms)
+  haltGoRts: number[];           // RTs for correct Go trials (for SSRT estimation)
 }
 
 // Flash gap is now adaptive — sourced from engine state, not a constant
@@ -102,12 +122,54 @@ export function createInitialGameState(
     gameMode,
     emberHits: 0,
     perfectStreak: 0,
+    haltTrialCount: 0,
+    haltCommissionErrors: 0,
+    haltOmissionErrors: 0,
+    haltCorrectGos: 0,
+    haltCorrectStops: 0,
+    haltSsd: 250,
+    haltGoRts: [],
   };
+}
+
+/**
+ * Selects trial type for HALT mode based on adaptive probabilities.
+ * Default ratio: ~70% Go, ~20% NoGo, ~10% Stop.
+ */
+function selectHaltTrialType(mutationRate: number): HaltTrialType {
+  const nogoRate = 0.15 + mutationRate * 0.25;
+  const stopRate = 0.05 + mutationRate * 0.10;
+  const roll = Math.random();
+  if (roll < stopRate) return 'stop';
+  if (roll < stopRate + nogoRate) return 'nogo';
+  return 'go';
 }
 
 /** Builds the next round state from engine settings. */
 export function buildRound(state: GameState): RoundState {
   const { levers } = state.engine;
+
+  // HALT mode: each "round" is a single rapid trial
+  if (state.gameMode === 'halt') {
+    const gridSize = levers.gridSize;
+    const totalCells = gridSize * gridSize;
+    const targetCell = Math.floor(Math.random() * totalCells);
+    const trialType = selectHaltTrialType(levers.mutationRate);
+
+    return {
+      round: state.roundCount + 1,
+      displaySequence: [targetCell],
+      expectedSequence: trialType === 'go' ? [targetCell] : [],
+      mutation: 'none',
+      poisonCell: null,
+      flashDuration: state.engine.currentFlashDuration,
+      flashGap: 150,
+      gridSize,
+      trialType,
+      stopSignalDelay: trialType === 'stop' ? state.haltSsd : undefined,
+      responseWindow: Math.max(400, state.engine.currentFlashDuration + 200),
+    };
+  }
   // Start at length 1 so round 1 adds sequenceGrowth (1) → first sequence is 2 cells.
   // Negative sequenceGrowth shrinks the sequence (floor of 2 to stay playable).
   const prevLength = state.round?.displaySequence.length ?? 1;
@@ -227,6 +289,99 @@ export function processTap(
 }
 
 /**
+ * Processes a HALT mode tap during the watch phase.
+ */
+export function processHaltTap(
+  state: GameState,
+  cellIndex: number,
+  rt: number
+): { nextState: Partial<GameState>; isError: boolean } {
+  if (!state.round || state.gameMode !== 'halt') {
+    return { nextState: {}, isError: false };
+  }
+
+  const { trialType } = state.round;
+  const targetCell = state.round.displaySequence[0];
+  const tappedTarget = cellIndex === targetCell;
+
+  if (trialType === 'go' && tappedTarget) {
+    return {
+      nextState: {
+        sessionCorrect: state.sessionCorrect + 1,
+        sessionTotal: state.sessionTotal + 1,
+        sessionRts: [...state.sessionRts, rt],
+        haltCorrectGos: state.haltCorrectGos + 1,
+        haltGoRts: [...state.haltGoRts, rt],
+        haltTrialCount: state.haltTrialCount + 1,
+      },
+      isError: false,
+    };
+  }
+
+  if (trialType === 'nogo' || trialType === 'stop') {
+    return {
+      nextState: {
+        sessionTotal: state.sessionTotal + 1,
+        sessionRts: [...state.sessionRts, rt],
+        haltCommissionErrors: state.haltCommissionErrors + 1,
+        haltTrialCount: state.haltTrialCount + 1,
+        haltSsd: trialType === 'stop'
+          ? Math.max(50, state.haltSsd - 50)
+          : state.haltSsd,
+      },
+      isError: true,
+    };
+  }
+
+  // Go trial but tapped wrong cell
+  return {
+    nextState: {
+      sessionTotal: state.sessionTotal + 1,
+      haltTrialCount: state.haltTrialCount + 1,
+    },
+    isError: true,
+  };
+}
+
+/**
+ * Called when a HALT trial times out without a tap.
+ * Go trials: omission error. NoGo/Stop trials: correct withhold.
+ */
+export function processHaltTimeout(
+  state: GameState
+): { nextState: Partial<GameState>; isError: boolean } {
+  if (!state.round || state.gameMode !== 'halt') {
+    return { nextState: {}, isError: false };
+  }
+
+  const { trialType } = state.round;
+
+  if (trialType === 'go') {
+    return {
+      nextState: {
+        sessionTotal: state.sessionTotal + 1,
+        haltOmissionErrors: state.haltOmissionErrors + 1,
+        haltTrialCount: state.haltTrialCount + 1,
+      },
+      isError: true,
+    };
+  }
+
+  return {
+    nextState: {
+      sessionCorrect: state.sessionCorrect + 1,
+      sessionTotal: state.sessionTotal + 1,
+      haltCorrectStops: trialType === 'stop' ? state.haltCorrectStops + 1 : state.haltCorrectStops,
+      haltTrialCount: state.haltTrialCount + 1,
+      haltSsd: trialType === 'stop'
+        ? Math.min(500, state.haltSsd + 50)
+        : state.haltSsd,
+    },
+    isError: false,
+  };
+}
+
+/**
  * Called when a round completes successfully. Updates the engine and preps next round.
  */
 export function completeRound(state: GameState): Partial<GameState> {
@@ -300,6 +455,33 @@ export function applyFailedRound(state: GameState): { engine: EngineState } {
   return { engine: updateEngine(state.engine, roundPerf, state.roundCount) };
 }
 
+/**
+ * Estimates Stop-Signal Reaction Time using the integration method.
+ */
+function estimateSsrt(goRts: number[], ssd: number, correctStops: number, totalStopTrials: number): number {
+  if (goRts.length === 0 || totalStopTrials === 0) return 0;
+  const failedStopRate = Math.max(0.05, Math.min(0.95, 1 - correctStops / totalStopTrials));
+  const sorted = [...goRts].sort((a, b) => a - b);
+  const nthIdx = Math.min(sorted.length - 1, Math.floor(failedStopRate * sorted.length));
+  return Math.max(0, sorted[nthIdx] - ssd);
+}
+
+/**
+ * Computes signal detection d' (d-prime) for HALT mode.
+ */
+function computeDPrime(hitRate: number, falseAlarmRate: number): number {
+  const hr = Math.max(0.01, Math.min(0.99, hitRate));
+  const far = Math.max(0.01, Math.min(0.99, falseAlarmRate));
+  const zScore = (p: number) => {
+    const t = Math.sqrt(-2 * Math.log(p < 0.5 ? p : 1 - p));
+    const c0 = 2.515517, c1 = 0.802853, c2 = 0.010328;
+    const d1 = 1.432788, d2 = 0.189269, d3 = 0.001308;
+    const z = t - (c0 + c1 * t + c2 * t * t) / (1 + d1 * t + d2 * t * t + d3 * t * t * t);
+    return p < 0.5 ? -z : z;
+  };
+  return zScore(hr) - zScore(far);
+}
+
 export function buildSummary(state: GameState): SessionSummary {
   const allRts = state.sessionRts;
   const avgRt = allRts.length > 0
@@ -311,15 +493,31 @@ export function buildSummary(state: GameState): SessionSummary {
     : 0;
 
   const maxSeq = state.round?.displaySequence.length ?? 2;
-  const avgRtValue = avgRt;
   const peakTempoAccuracy = accuracy;
+
+  // HALT-specific metrics
+  const totalNoGoStop = state.haltTrialCount - state.haltCorrectGos - state.haltOmissionErrors;
+  const hitRate = state.haltTrialCount > 0
+    ? state.haltCorrectGos / Math.max(1, state.haltCorrectGos + state.haltOmissionErrors)
+    : 1;
+  const falseAlarmRate = totalNoGoStop > 0
+    ? state.haltCommissionErrors / Math.max(1, totalNoGoStop)
+    : 0;
+  const totalStopTrials = state.haltCorrectStops + state.haltCommissionErrors;
+  const ssrt = estimateSsrt(state.haltGoRts, state.haltSsd, state.haltCorrectStops, totalStopTrials);
+  const dPrime = computeDPrime(hitRate, falseAlarmRate);
+
+  const haltMetrics = state.gameMode === 'halt'
+    ? { ssrt, dPrime, commissionErrors: state.haltCommissionErrors, totalTrials: state.haltTrialCount }
+    : undefined;
 
   const cognitiveScores = calcCognitiveScores(
     allRts,
     maxSeq,
     state.mutationsFaced.length,
     state.mutationsSurvived,
-    peakTempoAccuracy
+    peakTempoAccuracy,
+    haltMetrics
   );
 
   return {
@@ -327,7 +525,7 @@ export function buildSummary(state: GameState): SessionSummary {
     roundsCompleted: state.roundCount,
     maxSequenceLength: maxSeq,
     allRts,
-    avgRt: avgRtValue,
+    avgRt,
     bestRt,
     accuracy,
     mutationsFaced: state.mutationsFaced,
@@ -335,5 +533,9 @@ export function buildSummary(state: GameState): SessionSummary {
     engineIntensity: state.engine.intensity,
     cognitiveScores,
     bestStreak: state.perfectStreak,
+    haltCommissionErrors: state.haltCommissionErrors,
+    haltOmissionErrors: state.haltOmissionErrors,
+    haltSsrt: ssrt,
+    haltDPrime: dPrime,
   };
 }

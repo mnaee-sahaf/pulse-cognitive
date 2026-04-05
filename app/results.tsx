@@ -36,6 +36,7 @@ const MODE_ACTIVE_DIMS: Record<GameMode, Set<string>> = {
   arc: new Set(['Working Memory', 'Decision Speed']),
   tide: new Set(['Flexibility', 'Decision Speed']),
   ember: new Set(['Reaction Speed', 'Decision Speed']),
+  halt: new Set(['Impulse Control', 'Decision Speed']),
 };
 
 function buildNudge(
@@ -91,7 +92,7 @@ export default function ResultsScreen() {
     savedRef.current = true;
 
     const persist = async () => {
-      await saveSession(summary, engine.leverHistory);
+      await saveSession(summary, engine.leverHistory, gameMode);
       const seed = await getProfileSeedData(10);
       await updatePlayerProfile(seed.avgRts, seed.maxSequenceLengths, seed.flexRatings, seed.accuracies);
 
@@ -138,6 +139,7 @@ export default function ResultsScreen() {
     { label: 'Working Memory', score: cognitiveScores.wmScore, color: '#8B5CF6' },
     { label: 'Flexibility', score: cognitiveScores.flexScore, color: Colors.warning },
     { label: 'Decision Speed', score: cognitiveScores.decisionScore, color: Colors.success },
+    { label: 'Impulse Control', score: cognitiveScores.impulseScore, color: '#10B981' },
   ].map((m) => ({
     ...m,
     locked: !isFullUnlock && !activeDims.has(m.label),

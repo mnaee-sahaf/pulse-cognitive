@@ -27,7 +27,7 @@ interface Props {
 }
 
 export function CompanionSwitcher({ visible, companions, purchaseState, onSelect, onUpgrade, onClose }: Props) {
-  const orderedIds: CompanionId[] = ['arc', 'tide', 'ember'];
+  const orderedIds: CompanionId[] = ['arc', 'tide', 'ember', 'halt'];
 
   return (
     <Modal

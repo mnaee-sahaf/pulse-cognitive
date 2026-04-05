@@ -1,7 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import { getDb } from './database';
 
-export type CompanionId = 'ember' | 'tide' | 'arc';
+export type CompanionId = 'ember' | 'tide' | 'arc' | 'halt';
 
 export interface CompanionDefinition {
   id: CompanionId;
@@ -67,6 +67,19 @@ export const COMPANIONS: Record<CompanionId, CompanionDefinition> = {
       { level: 80, label: 'Apex',    primaryColor: '#1E0038', secondaryColor: '#3B0764', shape: 'hexagon' },
     ],
   },
+  halt: {
+    id: 'halt',
+    name: 'Halt',
+    description: 'Controlled and decisive. Stops on a dime.',
+    modeLabel: 'HALT',
+    trainingFocus: 'Impulse Control',
+    stages: [
+      { level: 1,  label: 'Guard',   primaryColor: '#10B981', secondaryColor: '#D1FAE5', shape: 'square' },
+      { level: 20, label: 'Shield',  primaryColor: '#059669', secondaryColor: '#A7F3D0', shape: 'square' },
+      { level: 50, label: 'Wall',    primaryColor: '#047857', secondaryColor: '#059669', shape: 'diamond' },
+      { level: 80, label: 'Bastion', primaryColor: '#064E3B', secondaryColor: '#047857', shape: 'diamond' },
+    ],
+  },
 };
 
 /** XP required to reach the next level. Increases with level. */
@@ -95,10 +108,11 @@ export function getNextEvolution(
 
 // ── Database ──────────────────────────────────────────────────────────────────
 
-/** Ensures companion_levels is seeded with all 3 companions. */
+/** Ensures companion_levels is seeded with all companions. */
 async function ensureCompanionLevelsSeeded(db: SQLite.SQLiteDatabase) {
+  const allIds: CompanionId[] = ['arc', 'tide', 'ember', 'halt'];
   const count = await db.getFirstAsync<{ c: number }>(`SELECT COUNT(*) as c FROM companion_levels`);
-  if (count && count.c >= 3) return;
+  if (count && count.c >= allIds.length) return;
 
   // Check if there's a legacy row to migrate from
   const legacy = await db.getFirstAsync<{ companion_id: string; level: number; xp: number }>(
@@ -106,7 +120,7 @@ async function ensureCompanionLevelsSeeded(db: SQLite.SQLiteDatabase) {
   ).catch(() => null);
 
   const activeId = legacy?.companion_id ?? 'arc';
-  const ids: CompanionId[] = ['arc', 'tide', 'ember'];
+  const ids = allIds;
   for (const id of ids) {
     const isActive = id === activeId ? 1 : 0;
     const level = id === activeId && legacy ? legacy.level : 5;

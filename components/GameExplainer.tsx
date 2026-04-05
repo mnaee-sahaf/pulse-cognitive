@@ -50,6 +50,18 @@ const EXPLAINERS: Record<GameMode, ExplainerContent> = {
     ],
     tip: 'Watch for poison cells — tapping one costs a life instantly.',
   },
+  halt: {
+    title: 'Halt',
+    modeLabel: 'HALT',
+    focus: 'Impulse Control',
+    color: COMPANIONS.halt.stages[0].primaryColor,
+    steps: [
+      'Cells light up rapidly — tap Go cells (green)',
+      'Do NOT tap No-Go cells (red border)',
+      'Stop-Signal trials change mid-flash — cancel your tap',
+    ],
+    tip: 'Speed matters, but false alarms cost lives. Control your impulses.',
+  },
 };
 
 interface GameExplainerProps {
