@@ -47,6 +47,7 @@ export default function GameScreen() {
   const hapticFeedback = useAppSettings((s) => s.hapticFeedback);
   const watchEndTimeRef = useRef(0);
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flashGapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emberFinishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevLivesRef = useRef(lives);
   const flashStartRef = useRef(0);
@@ -81,7 +82,7 @@ export default function GameScreen() {
           emberFinishTimerRef.current = setTimeout(() => finishEmberSequence(), round.flashGap);
         } else {
           watchEndTimeRef.current = performance.now();
-          setTimeout(() => startRecall(watchEndTimeRef.current), round.flashGap);
+          flashGapTimerRef.current = setTimeout(() => startRecall(watchEndTimeRef.current), round.flashGap);
         }
         return;
       }
@@ -96,7 +97,7 @@ export default function GameScreen() {
       i++;
       flashTimerRef.current = setTimeout(() => {
         setFlashIndex(-1);
-        setTimeout(flashNext, round.flashGap);
+        flashGapTimerRef.current = setTimeout(flashNext, round.flashGap);
       }, round.flashDuration);
     };
 
@@ -105,6 +106,7 @@ export default function GameScreen() {
     return () => {
       clearTimeout(startTimer);
       if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+      if (flashGapTimerRef.current) clearTimeout(flashGapTimerRef.current);
       if (emberFinishTimerRef.current) clearTimeout(emberFinishTimerRef.current);
     };
   }, [phase, round?.round]);
@@ -117,9 +119,11 @@ export default function GameScreen() {
     return () => clearTimeout(t);
   }, [phase]);
 
-  // Navigate to results when session ends
+  // Navigate to results when session ends (guard against double-navigation)
+  const navigatedRef = useRef(false);
   useEffect(() => {
-    if (phase === 'ended') {
+    if (phase === 'ended' && !navigatedRef.current) {
+      navigatedRef.current = true;
       router.replace('/results');
     }
   }, [phase]);
