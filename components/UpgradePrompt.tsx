@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, Pressable, Modal, StyleSheet } from 'react-native';
 import { Colors, FontSize, Spacing } from '../constants/theme';
 import { COMPANIONS, type CompanionId } from '../db/companion';
+import { ModeDetailCard } from './ModeDetailCard';
 
 interface UpgradePromptProps {
   visible: boolean;
@@ -18,93 +19,118 @@ const DIMENSION_MAP: Record<CompanionId, string> = {
 
 export function UpgradePrompt({ visible, freeCompanionId, onPurchase, onDismiss }: UpgradePromptProps) {
   const companionIds: CompanionId[] = ['arc', 'tide', 'ember'];
+  const [detailMode, setDetailMode] = useState<CompanionId | null>(null);
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      statusBarTranslucent
-    >
-      <View style={styles.backdrop}>
-        <View style={styles.card}>
-          <Text style={styles.title}>Unlock Full Training</Text>
-          <Text style={styles.subtitle}>
-            Your brain has 4 dimensions.{'\n'}You're only training 1.
-          </Text>
+    <>
+      <Modal
+        visible={visible}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+      >
+        <View style={styles.backdrop}>
+          <View style={styles.card}>
+            <Text style={styles.title}>Unlock Full Training</Text>
+            <Text style={styles.subtitle}>
+              Your brain has 4 dimensions.{'\n'}You're only training 1.
+            </Text>
 
-          {/* Companion grid */}
-          <View style={styles.companionRow}>
-            {companionIds.map((id) => {
-              const c = COMPANIONS[id];
-              const isFree = id === freeCompanionId;
-              const color = c.stages[0].primaryColor;
-              return (
-                <View key={id} style={styles.companionSlot}>
-                  <View style={[
-                    styles.companionIcon,
-                    { borderColor: isFree ? color : Colors.border },
-                    !isFree && styles.companionLocked,
-                  ]}>
-                    <Text style={[
-                      styles.companionEmoji,
-                      !isFree && { opacity: 0.3 },
+            {/* Companion grid — locked ones are tappable */}
+            <View style={styles.companionRow}>
+              {companionIds.map((id) => {
+                const c = COMPANIONS[id];
+                const isFree = id === freeCompanionId;
+                const color = c.stages[0].primaryColor;
+                return (
+                  <Pressable
+                    key={id}
+                    style={styles.companionSlot}
+                    onPress={() => !isFree && setDetailMode(id)}
+                    disabled={isFree}
+                  >
+                    <View style={[
+                      styles.companionIcon,
+                      { borderColor: isFree ? color : Colors.border },
+                      !isFree && styles.companionLocked,
                     ]}>
-                      {isFree ? '\u2713' : '\uD83D\uDD12'}
+                      <Text style={[
+                        styles.companionEmoji,
+                        !isFree && { opacity: 0.3 },
+                      ]}>
+                        {isFree ? '\u2713' : '\uD83D\uDD12'}
+                      </Text>
+                    </View>
+                    <Text style={[
+                      styles.companionName,
+                      { color: isFree ? color : Colors.textTertiary },
+                    ]}>
+                      {c.name}
                     </Text>
-                  </View>
-                  <Text style={[
-                    styles.companionName,
-                    { color: isFree ? color : Colors.textTertiary },
-                  ]}>
-                    {c.name}
-                  </Text>
-                  <Text style={styles.companionDim}>
-                    {DIMENSION_MAP[id]}
-                  </Text>
-                </View>
-              );
-            })}
-          </View>
-
-          {/* Dimensions list */}
-          <View style={styles.dimList}>
-            {companionIds.map((id) => {
-              const isFree = id === freeCompanionId;
-              return (
-                <View key={id} style={styles.dimRow}>
-                  <View style={[styles.dimDot, { backgroundColor: isFree ? COMPANIONS[id].stages[0].primaryColor : Colors.border }]} />
-                  <Text style={[styles.dimText, !isFree && styles.dimLocked]}>
-                    {DIMENSION_MAP[id]}
-                  </Text>
-                  {!isFree && <Text style={styles.lockLabel}>LOCKED</Text>}
-                </View>
-              );
-            })}
-            <View style={styles.dimRow}>
-              <View style={[styles.dimDot, { backgroundColor: Colors.success }]} />
-              <Text style={styles.dimText}>Decision Speed</Text>
-              <Text style={styles.freeLabel}>FREE</Text>
+                    <Text style={styles.companionDim}>
+                      {DIMENSION_MAP[id]}
+                    </Text>
+                    {!isFree && (
+                      <Text style={styles.tapHint}>Tap to learn more</Text>
+                    )}
+                  </Pressable>
+                );
+              })}
             </View>
+
+            {/* Dimensions list — locked ones are tappable */}
+            <View style={styles.dimList}>
+              {companionIds.map((id) => {
+                const isFree = id === freeCompanionId;
+                return (
+                  <Pressable
+                    key={id}
+                    style={styles.dimRow}
+                    onPress={() => !isFree && setDetailMode(id)}
+                    disabled={isFree}
+                  >
+                    <View style={[styles.dimDot, { backgroundColor: isFree ? COMPANIONS[id].stages[0].primaryColor : Colors.border }]} />
+                    <Text style={[styles.dimText, !isFree && styles.dimLocked]}>
+                      {DIMENSION_MAP[id]}
+                    </Text>
+                    {!isFree && <Text style={styles.lockLabel}>LOCKED</Text>}
+                  </Pressable>
+                );
+              })}
+              <View style={styles.dimRow}>
+                <View style={[styles.dimDot, { backgroundColor: Colors.success }]} />
+                <Text style={styles.dimText}>Decision Speed</Text>
+                <Text style={styles.freeLabel}>FREE</Text>
+              </View>
+            </View>
+
+            {/* Price */}
+            <Text style={styles.price}>$7.99 one-time · No subscription</Text>
+
+            {/* CTAs */}
+            <Pressable
+              style={({ pressed }) => [styles.purchaseBtn, pressed && { opacity: 0.85 }]}
+              onPress={onPurchase}
+            >
+              <Text style={styles.purchaseBtnText}>Unlock Everything</Text>
+            </Pressable>
+
+            <Pressable onPress={onDismiss} hitSlop={12}>
+              <Text style={styles.dismissText}>Maybe later</Text>
+            </Pressable>
           </View>
-
-          {/* Price */}
-          <Text style={styles.price}>$7.99 one-time · No subscription</Text>
-
-          {/* CTAs */}
-          <Pressable
-            style={({ pressed }) => [styles.purchaseBtn, pressed && { opacity: 0.85 }]}
-            onPress={onPurchase}
-          >
-            <Text style={styles.purchaseBtnText}>Unlock Everything</Text>
-          </Pressable>
-
-          <Pressable onPress={onDismiss} hitSlop={12}>
-            <Text style={styles.dismissText}>Maybe later</Text>
-          </Pressable>
         </View>
-      </View>
-    </Modal>
+      </Modal>
+
+      {/* Mode detail overlay — opens on top of the upgrade modal */}
+      {detailMode && (
+        <ModeDetailCard
+          visible={true}
+          companionId={detailMode}
+          onDismiss={() => setDetailMode(null)}
+        />
+      )}
+    </>
   );
 }
 
@@ -172,6 +198,12 @@ const styles = StyleSheet.create({
     color: Colors.textTertiary,
     letterSpacing: 0.5,
     textTransform: 'uppercase',
+  },
+  tapHint: {
+    fontSize: 8,
+    color: Colors.accent,
+    letterSpacing: 0.3,
+    marginTop: 2,
   },
   dimList: {
     width: '100%',
