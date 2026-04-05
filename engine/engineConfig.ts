@@ -35,6 +35,9 @@ export interface EngineConfig {
   // Cold start — used when player has no session history
   defaultTempoRamp: number;     // starting ramp for new players (default: -10)
 
+  // Plateau detection — nudge when stuck in ZPD too long
+  plateauBreakThreshold: number;  // consecutive ZPD rounds before nudging (default: 4)
+
   // Grid expansion — requires 3 consecutive rounds above gridExpandAccuracy
   gridExpand3to4Round: number;  // earliest round to expand 3x3 → 4x4 (default: 6)
   gridExpand4to5Round: number;  // earliest round to expand 4x4 → 5x5 (default: 12)
@@ -60,6 +63,7 @@ export const ENGINE_CONFIG_DEFAULTS: EngineConfig = {
   steadyPushTempoRamp: -15,
   easeTempoRamp: 40,
   defaultTempoRamp: -10,
+  plateauBreakThreshold: 4,
   gridExpand3to4Round: 6,
   gridExpand4to5Round: 12,
   gridExpandAccuracy: 0.88,

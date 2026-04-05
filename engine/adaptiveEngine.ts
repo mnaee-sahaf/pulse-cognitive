@@ -29,6 +29,7 @@ export interface EngineState {
   leverHistory: LeverSettings[];  // snapshot of levers active at the start of each round
   consecutiveMutationSurvives: number;
   consecutiveFailedMutations: number;
+  consecutiveZpdRounds: number;  // how many rounds in a row we've been in the hold-steady zone
   intensity: number;             // 0.0–1.0 snapshot of how hard the engine is pushing
   currentFlashDuration: number;  // ms — accumulates tempo deltas each round
   currentFlashGap: number;       // ms — accumulates gap deltas each round
@@ -71,6 +72,7 @@ export function initEngine(
     leverHistory: [],
     consecutiveMutationSurvives: 0,
     consecutiveFailedMutations: 0,
+    consecutiveZpdRounds: 0,
     intensity: 0,
     currentFlashDuration: config.initialFlashDuration,
     currentFlashGap: config.initialFlashGap,
@@ -110,7 +112,7 @@ export function updateEngine(
   const history = [...state.roundHistory, roundPerf];
   const leverHistory = [...state.leverHistory, { ...state.levers }];
   let levers = { ...state.levers };
-  let { consecutiveMutationSurvives, consecutiveFailedMutations } = state;
+  let { consecutiveMutationSurvives, consecutiveFailedMutations, consecutiveZpdRounds } = state;
 
   // Track mutation streaks
   if (roundPerf.mutationSurvived === true) {
@@ -168,16 +170,36 @@ export function updateEngine(
       levers.flashGapDelta = -8;
       levers.mutationRate = clampMutationRate(levers.mutationRate + 0.08);
     } else if (accuracy >= cfg.overwhelmThreshold && accuracy <= cfg.zpdUpper) {
-      // Target ZPD — hold steady, don't grow sequence
-      levers.sequenceGrowth = 0;
-      levers.tempoRamp = 0;
-      levers.flashGapDelta = 0;
+      consecutiveZpdRounds += 1;
+      if (consecutiveZpdRounds >= cfg.plateauBreakThreshold) {
+        // Plateau detected — nudge one axis to break monotony.
+        // Cycle through: mutation → tempo → sequence growth
+        const nudgeAxis = consecutiveZpdRounds % 3;
+        if (nudgeAxis === 0) {
+          levers.mutationRate = clampMutationRate(levers.mutationRate + 0.1);
+        } else if (nudgeAxis === 1) {
+          levers.tempoRamp = -10;
+          levers.flashGapDelta = -5;
+        } else {
+          levers.sequenceGrowth = 1;
+        }
+      } else {
+        // Normal ZPD — hold steady
+        levers.sequenceGrowth = 0;
+        levers.tempoRamp = 0;
+        levers.flashGapDelta = 0;
+      }
     } else if (accuracy < cfg.overwhelmThreshold) {
       // Overwhelmed — shrink sequence and slow down to give real relief
       levers.sequenceGrowth = accuracy < cfg.overwhelmThreshold - 0.15 ? -2 : -1;
       levers.tempoRamp = cfg.easeTempoRamp;
       levers.flashGapDelta = 20;
       levers.mutationRate = clampMutationRate(levers.mutationRate - 0.15);
+    }
+
+    // Reset plateau counter when leaving ZPD zone
+    if (accuracy > cfg.zpdUpper || accuracy < cfg.overwhelmThreshold) {
+      consecutiveZpdRounds = 0;
     }
 
     // Mutation flexibility adjustments
@@ -228,6 +250,7 @@ export function updateEngine(
     leverHistory,
     consecutiveMutationSurvives,
     consecutiveFailedMutations,
+    consecutiveZpdRounds,
     intensity: Math.min(1, intensityScore),
     currentFlashDuration: newFlashDuration,
     currentFlashGap: newFlashGap,
