@@ -20,6 +20,7 @@ import { loadEngineConfig, saveEngineConfig } from '../db/engineConfig';
 import { loadAppSettings, saveAppSettings } from '../db/appSettings';
 import { resetAllData, backupDatabase, restoreDatabase, hasBackup } from '../db/database';
 import { useAppSettings } from '../store/appSettingsStore';
+import { DevLogViewer } from '../components/DevLogViewer';
 
 // ------- Draft state — all values stored as strings while editing -------
 type DraftConfig = { [K in keyof EngineConfig]: string };
@@ -515,6 +516,9 @@ export default function SettingsScreen() {
                   </View>
                 </Pressable>
               </View>
+
+              {/* Dev Log Viewer */}
+              <DevLogViewer maxHeight={500} />
             </View>
           )}
 
