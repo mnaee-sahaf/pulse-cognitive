@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Pressable, Modal, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { Colors, FontSize, Spacing } from '../constants/theme';
 import { COMPANIONS, type CompanionId } from '../db/companion';
 
@@ -116,16 +116,10 @@ interface ModeDetailCardProps {
   onDismiss: () => void;
 }
 
-export function ModeDetailCard({ visible, companionId, onDismiss }: ModeDetailCardProps) {
+export function ModeDetailCard({ companionId, onDismiss }: ModeDetailCardProps) {
   const detail = MODE_DETAILS[companionId];
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="slide"
-      statusBarTranslucent
-    >
       <View style={styles.backdrop}>
         <View style={styles.card}>
           <ScrollView
@@ -199,7 +193,6 @@ export function ModeDetailCard({ visible, companionId, onDismiss }: ModeDetailCa
           </Pressable>
         </View>
       </View>
-    </Modal>
   );
 }
 

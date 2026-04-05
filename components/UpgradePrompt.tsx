@@ -3,6 +3,7 @@ import { View, Text, Pressable, Modal, StyleSheet } from 'react-native';
 import { Colors, FontSize, Spacing } from '../constants/theme';
 import { COMPANIONS, type CompanionId } from '../db/companion';
 import { ModeDetailCard } from './ModeDetailCard';
+import { log } from '../lib/devLog';
 
 interface UpgradePromptProps {
   visible: boolean;
@@ -22,13 +23,23 @@ export function UpgradePrompt({ visible, freeCompanionId, onPurchase, onDismiss 
   const [detailMode, setDetailMode] = useState<CompanionId | null>(null);
 
   return (
-    <>
       <Modal
         visible={visible}
         transparent
         animationType="fade"
         statusBarTranslucent
       >
+        {/* Detail card takes over the modal when a locked mode is tapped */}
+        {detailMode ? (
+          <ModeDetailCard
+            visible={true}
+            companionId={detailMode}
+            onDismiss={() => {
+              log.info('ModeDetailCard dismissed', { mode: detailMode });
+              setDetailMode(null);
+            }}
+          />
+        ) : (
         <View style={styles.backdrop}>
           <View style={styles.card}>
             <Text style={styles.title}>Unlock Full Training</Text>
@@ -46,7 +57,12 @@ export function UpgradePrompt({ visible, freeCompanionId, onPurchase, onDismiss 
                   <Pressable
                     key={id}
                     style={styles.companionSlot}
-                    onPress={() => !isFree && setDetailMode(id)}
+                    onPress={() => {
+                      if (!isFree) {
+                        log.info('locked companion icon tapped', { mode: id });
+                        setDetailMode(id);
+                      }
+                    }}
                     disabled={isFree}
                   >
                     <View style={[
@@ -86,7 +102,12 @@ export function UpgradePrompt({ visible, freeCompanionId, onPurchase, onDismiss 
                   <Pressable
                     key={id}
                     style={styles.dimRow}
-                    onPress={() => !isFree && setDetailMode(id)}
+                    onPress={() => {
+                      if (!isFree) {
+                        log.info('locked dimension row tapped', { mode: id });
+                        setDetailMode(id);
+                      }
+                    }}
                     disabled={isFree}
                   >
                     <View style={[styles.dimDot, { backgroundColor: isFree ? COMPANIONS[id].stages[0].primaryColor : Colors.border }]} />
@@ -120,17 +141,8 @@ export function UpgradePrompt({ visible, freeCompanionId, onPurchase, onDismiss 
             </Pressable>
           </View>
         </View>
+        )}
       </Modal>
-
-      {/* Mode detail overlay — opens on top of the upgrade modal */}
-      {detailMode && (
-        <ModeDetailCard
-          visible={true}
-          companionId={detailMode}
-          onDismiss={() => setDetailMode(null)}
-        />
-      )}
-    </>
   );
 }
 
