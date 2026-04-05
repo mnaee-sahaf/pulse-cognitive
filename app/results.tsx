@@ -122,9 +122,10 @@ export default function ResultsScreen() {
     persist().catch(console.error);
   }, []);
 
+  // Summary may be null briefly while the store update propagates after navigation.
+  // Show nothing for one frame rather than redirecting to home immediately.
   if (!summary) {
-    router.replace('/');
-    return null;
+    return <View style={styles.safe} />;
   }
 
   const { cognitiveScores, totalScore, roundsCompleted, avgRt, bestRt, accuracy } = summary;
