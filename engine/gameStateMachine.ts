@@ -24,6 +24,15 @@ export type GamePhase = 'idle' | 'watch' | 'recall' | 'feedback' | 'ended';
 /** HALT mode trial types */
 export type HaltTrialType = 'go' | 'nogo' | 'stop';
 
+/** Colors used for ARC binding questions */
+export const BINDING_COLORS = ['#EF4444', '#3B82F6', '#F59E0B', '#10B981', '#8B5CF6'] as const;
+
+export interface BindingQuestion {
+  position: number;       // which cell in the sequence (0-indexed)
+  correctColor: string;   // the actual color at that position
+  options: string[];      // 3-4 color options to choose from
+}
+
 export interface RoundState {
   round: number;
   displaySequence: number[];
@@ -35,8 +44,11 @@ export interface RoundState {
   gridSize: GridSize;
   // HALT mode fields
   trialType?: HaltTrialType;
-  stopSignalDelay?: number;  // ms after stimulus onset before stop signal appears
-  responseWindow?: number;   // ms after flash onset to accept/expect response
+  stopSignalDelay?: number;
+  responseWindow?: number;
+  // ARC binding fields
+  bindingColors?: string[];         // color assigned to each cell in displaySequence
+  bindingQuestion?: BindingQuestion; // question asked after recall
 }
 
 export interface TapResult {
@@ -93,6 +105,9 @@ export interface GameState {
   haltCorrectStops: number;
   haltSsd: number;               // current stop-signal delay (staircase, ms)
   haltGoRts: number[];           // RTs for correct Go trials (for SSRT estimation)
+  // ARC binding tracking
+  bindingQuestionsAsked: number;
+  bindingQuestionsCorrect: number;
 }
 
 // Flash gap is now adaptive — sourced from engine state, not a constant
@@ -129,6 +144,23 @@ export function createInitialGameState(
     haltCorrectStops: 0,
     haltSsd: 250,
     haltGoRts: [],
+    bindingQuestionsAsked: 0,
+    bindingQuestionsCorrect: 0,
+  };
+}
+
+/**
+ * Processes a binding question answer for ARC mode.
+ */
+export function processBindingAnswer(
+  state: GameState,
+  selectedColor: string
+): Partial<GameState> {
+  if (!state.round?.bindingQuestion) return {};
+  const correct = selectedColor === state.round.bindingQuestion.correctColor;
+  return {
+    bindingQuestionsAsked: state.bindingQuestionsAsked + 1,
+    bindingQuestionsCorrect: state.bindingQuestionsCorrect + (correct ? 1 : 0),
   };
 }
 
@@ -193,6 +225,26 @@ export function buildRound(state: GameState): RoundState {
     ? [...expectedSequence].reverse()
     : expectedSequence;
 
+  // ARC mode: generate binding colors and question (only after sequence length >= 3)
+  let bindingColors: string[] | undefined;
+  let bindingQuestion: BindingQuestion | undefined;
+
+  if (state.gameMode === 'arc' && displaySequence.length >= 3 && levers.mutationRate > 0.1) {
+    // Assign a random color to each cell in the sequence
+    bindingColors = displaySequence.map(
+      () => BINDING_COLORS[Math.floor(Math.random() * BINDING_COLORS.length)]
+    );
+    // Ask about a random position in the sequence
+    const qPos = Math.floor(Math.random() * displaySequence.length);
+    const correctColor = bindingColors[qPos];
+    // Build 3 options: correct + 2 distractors
+    const distractors = BINDING_COLORS.filter((c) => c !== correctColor);
+    const shuffled = [...distractors].sort(() => Math.random() - 0.5).slice(0, 2);
+    const options = [correctColor, ...shuffled].sort(() => Math.random() - 0.5);
+
+    bindingQuestion = { position: qPos, correctColor, options };
+  }
+
   return {
     round: state.roundCount + 1,
     displaySequence,
@@ -202,6 +254,8 @@ export function buildRound(state: GameState): RoundState {
     flashDuration: state.engine.currentFlashDuration,
     flashGap: state.engine.currentFlashGap,
     gridSize: levers.gridSize,
+    bindingColors,
+    bindingQuestion,
   };
 }
 
