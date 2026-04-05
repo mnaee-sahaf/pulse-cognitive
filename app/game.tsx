@@ -189,9 +189,7 @@ export default function GameScreen() {
   const tileShape: TileShape =
     gameMode === 'arc'   ? 'hexagon' :
     gameMode === 'tide'  ? 'circle' :
-    // TODO: refactor Ember game mechanics after research — real-time intercept
-    // feel, scoring, and tile shape all need revisiting before this is final.
-    'triangle';
+    'square';
 
   const mutationLabel = round.mutation !== 'none' ? round.mutation.toUpperCase() : null;
 

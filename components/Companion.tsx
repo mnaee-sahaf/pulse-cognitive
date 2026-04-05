@@ -122,7 +122,7 @@ function CompanionShape({
   primaryColor,
   secondaryColor,
 }: {
-  shape: 'circle' | 'triangle' | 'diamond' | 'hexagon';
+  shape: 'circle' | 'triangle' | 'square' | 'diamond' | 'hexagon';
   size: number;
   primaryColor: string;
   secondaryColor: string;
@@ -152,6 +152,37 @@ function CompanionShape({
             },
           ]}
         />
+      </View>
+    );
+  }
+
+  if (shape === 'square') {
+    const s = size * 0.78;
+    const innerS = s * 0.4;
+    return (
+      <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+        <View
+          style={{
+            width: s,
+            height: s,
+            borderRadius: s * 0.15,
+            backgroundColor: primaryColor,
+            shadowColor: primaryColor,
+            shadowOpacity: 0.35,
+            shadowRadius: 8,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <View
+            style={{
+              width: innerS,
+              height: innerS,
+              borderRadius: innerS * 0.15,
+              backgroundColor: secondaryColor,
+            }}
+          />
+        </View>
       </View>
     );
   }

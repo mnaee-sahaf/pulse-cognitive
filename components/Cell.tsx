@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import { Pressable } from 'react-native';
-import Svg, { Polygon, Circle } from 'react-native-svg';
+import Svg, { Polygon, Circle, Rect } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { useAppSettings } from '../store/appSettingsStore';
 import Animated, {
@@ -14,10 +14,11 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Colors } from '../constants/theme';
 
-export type TileShape = 'circle' | 'triangle' | 'hexagon';
+export type TileShape = 'circle' | 'triangle' | 'hexagon' | 'square';
 
 const AnimatedPolygon = Animated.createAnimatedComponent(Polygon);
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+const AnimatedRect = Animated.createAnimatedComponent(Rect);
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 // Pointy-top hexagon vertices, inset within size×size viewBox
@@ -31,8 +32,6 @@ function hexPoints(size: number, inset = 0.86): string {
   }).join(' ');
 }
 
-// TODO: Ember tile shape needs to be reconsidered alongside Ember game mechanics
-// refactor — triangle may not be the right choice once intercept flow is finalised.
 // Equilateral triangle pointing up, centered in size×size viewBox
 function triPoints(size: number, inset = 0.86): string {
   const margin = (size * (1 - inset)) / 2;
@@ -165,6 +164,17 @@ export function Cell({
             cx={size / 2}
             cy={size / 2}
             r={(size / 2) * 0.86}
+            animatedProps={shapeFill}
+          />
+        )}
+        {tileShape === 'square' && (
+          <AnimatedRect
+            x={size * 0.07}
+            y={size * 0.07}
+            width={size * 0.86}
+            height={size * 0.86}
+            rx={size * 0.12}
+            ry={size * 0.12}
             animatedProps={shapeFill}
           />
         )}

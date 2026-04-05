@@ -116,7 +116,7 @@ function CompanionInfoCard({ state, onPress }: { state: CompanionState; onPress:
   );
 }
 
-type ShapeType = 'circle' | 'triangle' | 'diamond' | 'hexagon';
+type ShapeType = 'circle' | 'triangle' | 'square' | 'diamond' | 'hexagon';
 
 function ShapeIcon({ shape, color, size }: { shape: ShapeType; color: string; size: number }) {
   if (shape === 'circle') {
@@ -138,6 +138,15 @@ function ShapeIcon({ shape, color, size }: { shape: ShapeType; color: string; si
           <View style={{ width: w, height: midH, backgroundColor: color }} />
           <View style={{ width: 0, height: 0, borderLeftWidth: w / 2, borderRightWidth: w / 2, borderTopWidth: capH, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: color }} />
         </View>
+      </View>
+    );
+  }
+
+  if (shape === 'square') {
+    const s = size * 0.78;
+    return (
+      <View style={[styles.shapeContainer, { width: size, height: size }]}>
+        <View style={{ width: s, height: s, borderRadius: s * 0.15, backgroundColor: color }} />
       </View>
     );
   }

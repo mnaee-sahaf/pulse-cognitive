@@ -15,7 +15,7 @@ export interface CompanionDefinition {
     label: string;       // evolution name
     primaryColor: string;
     secondaryColor: string;
-    shape: 'circle' | 'triangle' | 'diamond' | 'hexagon'; // abstract shape
+    shape: 'circle' | 'triangle' | 'square' | 'diamond' | 'hexagon'; // abstract shape
   }[];
 }
 
@@ -35,8 +35,8 @@ export const COMPANIONS: Record<CompanionId, CompanionDefinition> = {
     modeLabel: 'INTERCEPT',
     trainingFocus: 'Reaction Speed',
     stages: [
-      { level: 1,  label: 'Spark',   primaryColor: '#FF6B35', secondaryColor: '#FFE0D0', shape: 'triangle' },
-      { level: 20, label: 'Flare',   primaryColor: '#FF4500', secondaryColor: '#FFD0B0', shape: 'triangle' },
+      { level: 1,  label: 'Spark',   primaryColor: '#FF6B35', secondaryColor: '#FFE0D0', shape: 'square' },
+      { level: 20, label: 'Flare',   primaryColor: '#FF4500', secondaryColor: '#FFD0B0', shape: 'square' },
       { level: 50, label: 'Blaze',   primaryColor: '#CC2200', secondaryColor: '#FF6B35', shape: 'diamond' },
       { level: 80, label: 'Inferno', primaryColor: '#8B0000', secondaryColor: '#CC2200', shape: 'diamond' },
     ],
