@@ -238,11 +238,22 @@ export function updateEngine(
     Math.max(cfg.flashGapFloor, state.currentFlashGap + levers.flashGapDelta)
   );
 
-  // Compute intensity (0–1) — how hard the engine is pushing
+  // Compute intensity (0–1) — comprehensive difficulty snapshot.
+  // Factors: flash speed, flash gap tightness, mutation rate, grid size, sequence load.
+  const maxCells = levers.gridSize * levers.gridSize;
+  const lastSeqLength = history.length > 0 ? history[history.length - 1].total : 2;
+  const seqLoad = Math.min(1, (lastSeqLength - 2) / (maxCells - 2 || 1)); // 2 cells = 0, full grid = 1
+  const tempoIntensity = (cfg.flashCeiling - newFlashDuration) / (cfg.flashCeiling - cfg.flashFloor);
+  const gapIntensity = (cfg.flashGapCeiling - newFlashGap) / (cfg.flashGapCeiling - cfg.flashGapFloor);
+  const gridIntensity = (levers.gridSize - 3) / 2; // 3×3 = 0, 5×5 = 1
+  const mutIntensity = levers.mutationRate / 0.6;
+
   const intensityScore =
-    ((levers.sequenceGrowth - 1) / 2) * 0.3 +
-    ((800 - newFlashDuration) / 500) * 0.4 +
-    (levers.mutationRate / 0.6) * 0.3;
+    tempoIntensity * 0.25 +
+    seqLoad * 0.25 +
+    mutIntensity * 0.20 +
+    gridIntensity * 0.15 +
+    gapIntensity * 0.15;
 
   return {
     levers,
