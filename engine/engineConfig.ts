@@ -37,7 +37,7 @@ export interface EngineConfig {
 }
 
 export const ENGINE_CONFIG_DEFAULTS: EngineConfig = {
-  warmupRounds: 3,
+  warmupRounds: 2,
   warmupTempoRamp: -5,
   initialFlashDuration: 600,
   flashFloor: 300,

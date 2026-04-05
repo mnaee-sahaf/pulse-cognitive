@@ -119,9 +119,27 @@ export function updateEngine(
   const cfg = state.config;
 
   if (currentRound < cfg.warmupRounds) {
-    // Warm-up phase: fixed gentle escalation, no adaptation
-    levers.sequenceGrowth = 1;
-    levers.tempoRamp = cfg.warmupTempoRamp;
+    // Calibration warm-up: use early round data to seed levers for faster ramp-up.
+    // Round 0 measures raw RT; round 1 adjusts levers based on that measurement.
+    if (currentRound === 1 && history.length >= 1) {
+      const calibrationRt = history[0].avgRt;
+      const calibrationAcc = history[0].total === 0 ? 1 : history[0].correct / history[0].total;
+      // Fast responder with good accuracy → push harder right out of warm-up
+      if (calibrationRt < cfg.rtFastThreshold && calibrationAcc >= cfg.overwhelmThreshold) {
+        levers.sequenceGrowth = 2;
+        levers.tempoRamp = cfg.pushTempoRamp;
+        levers.mutationRate = 0.1;
+      } else if (calibrationAcc >= cfg.overwhelmThreshold) {
+        levers.sequenceGrowth = 1;
+        levers.tempoRamp = cfg.warmupTempoRamp * 2; // slightly more push
+      } else {
+        levers.sequenceGrowth = 1;
+        levers.tempoRamp = cfg.warmupTempoRamp;
+      }
+    } else {
+      levers.sequenceGrowth = 1;
+      levers.tempoRamp = cfg.warmupTempoRamp;
+    }
   } else {
     const accuracy = rollingAccuracy(history, 3);
     const avgRt = rollingAvgRt(history, 3);
