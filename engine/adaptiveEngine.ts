@@ -161,19 +161,22 @@ export function updateEngine(
     if (currentRound === 1 && history.length >= 1) {
       const calibrationRt = history[0].avgRt;
       const calibrationAcc = history[0].total === 0 ? 1 : history[0].correct / history[0].total;
-      // Fast responder with good accuracy → push harder right out of warm-up
       if (calibrationRt < cfg.rtFastThreshold && calibrationAcc >= cfg.overwhelmThreshold) {
+        branch = 'warmup-calibrate-fast';
         levers.sequenceGrowth = 2;
         levers.tempoRamp = cfg.pushTempoRamp;
         levers.mutationRate = 0.1;
       } else if (calibrationAcc >= cfg.overwhelmThreshold) {
+        branch = 'warmup-calibrate-ok';
         levers.sequenceGrowth = 1;
-        levers.tempoRamp = cfg.warmupTempoRamp * 2; // slightly more push
+        levers.tempoRamp = cfg.warmupTempoRamp * 2;
       } else {
+        branch = 'warmup-calibrate-slow';
         levers.sequenceGrowth = 1;
         levers.tempoRamp = cfg.warmupTempoRamp;
       }
     } else {
+      branch = 'warmup';
       levers.sequenceGrowth = 1;
       levers.tempoRamp = cfg.warmupTempoRamp;
     }
@@ -199,26 +202,36 @@ export function updateEngine(
       levers.flashGapDelta = -8;
       levers.mutationRate = clampMutationRate(levers.mutationRate + 0.08);
     } else if (accuracy >= cfg.overwhelmThreshold && accuracy <= cfg.zpdUpper) {
-      branch = 'zpd-hold';
-      consecutiveZpdRounds += 1;
-      if (consecutiveZpdRounds >= cfg.plateauBreakThreshold) {
-        branch = 'zpd-plateau-break';
-        // Plateau detected — nudge one axis to break monotony.
-        // Cycle through: mutation → tempo → sequence growth
-        const nudgeAxis = consecutiveZpdRounds % 3;
-        if (nudgeAxis === 0) {
-          levers.mutationRate = clampMutationRate(levers.mutationRate + 0.1);
-        } else if (nudgeAxis === 1) {
-          levers.tempoRamp = -10;
-          levers.flashGapDelta = -5;
-        } else {
-          levers.sequenceGrowth = 1;
-        }
+      // Check if this is a post-recovery ramp-up: last round was perfect but short.
+      // If the player just aced a trivially short sequence, push growth instead of holding.
+      const lastRound = roundPerf;
+      const lastAcc = lastRound.total === 0 ? 1 : lastRound.correct / lastRound.total;
+      const isPostRecovery = lastAcc >= 0.95 && lastRound.total <= 3;
+
+      if (isPostRecovery) {
+        branch = 'zpd-recovery-ramp';
+        levers.sequenceGrowth = 1;
+        levers.tempoRamp = cfg.steadyPushTempoRamp;
+        levers.flashGapDelta = -5;
       } else {
-        // Normal ZPD — hold steady
-        levers.sequenceGrowth = 0;
-        levers.tempoRamp = 0;
-        levers.flashGapDelta = 0;
+        branch = 'zpd-hold';
+        consecutiveZpdRounds += 1;
+        if (consecutiveZpdRounds >= cfg.plateauBreakThreshold) {
+          branch = 'zpd-plateau-break';
+          const nudgeAxis = consecutiveZpdRounds % 3;
+          if (nudgeAxis === 0) {
+            levers.mutationRate = clampMutationRate(levers.mutationRate + 0.1);
+          } else if (nudgeAxis === 1) {
+            levers.tempoRamp = -10;
+            levers.flashGapDelta = -5;
+          } else {
+            levers.sequenceGrowth = 1;
+          }
+        } else {
+          levers.sequenceGrowth = 0;
+          levers.tempoRamp = 0;
+          levers.flashGapDelta = 0;
+        }
       }
     } else if (accuracy < cfg.overwhelmThreshold) {
       branch = 'overwhelm';
@@ -242,19 +255,23 @@ export function updateEngine(
     }
   }
 
-  // Grid expansion — requires 3 consecutive rounds above threshold, not just one check
-  const last3Accuracies = history.slice(-3).map((r) =>
-    r.total === 0 ? 1 : r.correct / r.total
-  );
+  // Grid expansion — requires 3 consecutive strong rounds with non-trivial sequences.
+  // Minimum sequence length of 3 prevents trivially easy recovery rounds from gaming the check.
+  const last3 = history.slice(-3);
   const allStrong =
-    last3Accuracies.length === 3 &&
-    last3Accuracies.every((a) => a > cfg.gridExpandAccuracy);
+    last3.length === 3 &&
+    last3.every((r) => {
+      const acc = r.total === 0 ? 1 : r.correct / r.total;
+      return acc > cfg.gridExpandAccuracy && r.total >= 3;
+    });
 
   if (currentRound >= cfg.gridExpand3to4Round && levers.gridSize === 3 && allStrong) {
     levers.gridSize = 4;
+    log.engine('grid expanded 3→4', { round: currentRound });
   }
   if (currentRound >= cfg.gridExpand4to5Round && levers.gridSize === 4 && allStrong) {
     levers.gridSize = 5;
+    log.engine('grid expanded 4→5', { round: currentRound });
   }
 
   // Accumulate tempo: apply this round's ramp delta to the running flash duration
