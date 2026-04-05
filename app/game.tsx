@@ -16,6 +16,7 @@ import * as Haptics from 'expo-haptics';
 import { AnimatedBackground } from '../components/AnimatedBackground';
 import { useAppSettings } from '../store/appSettingsStore';
 import { COMPANIONS } from '../db/companion';
+import { log } from '../lib/devLog';
 
 export default function GameScreen() {
   const router = useRouter();
