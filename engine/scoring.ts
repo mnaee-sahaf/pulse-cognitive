@@ -47,6 +47,58 @@ export interface HaltMetrics {
   totalTrials: number;
 }
 
+/** RT distribution metrics for trend analysis */
+export interface RtDistributionMetrics {
+  meanRt: number;
+  sdRt: number;
+  coefficientOfVariation: number;  // IIV — sdRt / meanRt (lower = more consistent)
+  skewness: number;                // positive skew = occasional slow responses
+}
+
+/**
+ * Computes RT distribution metrics from a session's reaction times.
+ * IIV (intraindividual variability) is the strongest predictor of
+ * cognitive decline per Jutten et al. (2023) and Bielak et al. (2017).
+ */
+export function calcRtDistribution(allRts: number[]): RtDistributionMetrics {
+  if (allRts.length < 3) {
+    return { meanRt: 0, sdRt: 0, coefficientOfVariation: 0, skewness: 0 };
+  }
+
+  const n = allRts.length;
+  const mean = allRts.reduce((a, b) => a + b, 0) / n;
+
+  const variance = allRts.reduce((sum, rt) => sum + (rt - mean) ** 2, 0) / (n - 1);
+  const sd = Math.sqrt(variance);
+  const cv = mean > 0 ? sd / mean : 0;
+
+  // Fisher-Pearson skewness coefficient
+  const m3 = allRts.reduce((sum, rt) => sum + ((rt - mean) / sd) ** 3, 0) / n;
+  const skewness = sd > 0 ? m3 : 0;
+
+  return {
+    meanRt: Math.round(mean),
+    sdRt: Math.round(sd),
+    coefficientOfVariation: Math.round(cv * 1000) / 1000,
+    skewness: Math.round(skewness * 100) / 100,
+  };
+}
+
+/**
+ * Computes the Pulse Index — a single composite cognitive score (0–100)
+ * weighted by evidence-supported importance of each dimension.
+ */
+export function calcPulseIndex(scores: CognitiveScores): number {
+  return Math.round(
+    scores.rtScore * 0.25 +       // Processing Speed — strongest transfer evidence
+    scores.wmScore * 0.20 +        // Working Memory — strongest predictor of intelligence
+    scores.flexScore * 0.15 +      // Cognitive Flexibility — critical for adaptive behavior
+    scores.decisionScore * 0.15 +  // Decision Efficiency — DDM support
+    scores.impulseScore * 0.15 +   // Impulse Control — high clinical relevance
+    10                              // 10% reserved for future Spatial Reasoning dimension
+  );
+}
+
 /**
  * Derives 0–100 scores for each cognitive dimension from session data.
  */
