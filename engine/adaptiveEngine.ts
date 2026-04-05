@@ -85,7 +85,6 @@ export function initEngine(
     flashGapDelta: gapFromRt,
   };
 
-  return {
   log.engine('initEngine — profile seeded levers', {
     wmCapacity: p.wmCapacity,
     baselineRt: p.baselineRt,
@@ -96,6 +95,7 @@ export function initEngine(
     flashDuration: Math.round(flashFromProfile),
   });
 
+  return {
     levers,
     roundHistory: [],
     leverHistory: [],
