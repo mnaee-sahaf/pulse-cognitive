@@ -1,5 +1,6 @@
 import type { GridSize, Mutation } from './sequenceGenerator';
 import { ENGINE_CONFIG_DEFAULTS, type EngineConfig } from './engineConfig';
+import { log } from '../lib/devLog';
 
 export interface LeverSettings {
   sequenceGrowth: number;         // elements added per round (negative = shrink, 0 = hold, positive = grow)
@@ -85,6 +86,16 @@ export function initEngine(
   };
 
   return {
+  log.engine('initEngine — profile seeded levers', {
+    wmCapacity: p.wmCapacity,
+    baselineRt: p.baselineRt,
+    flexRating: p.flexRating,
+    seededGrowth: levers.sequenceGrowth,
+    seededTempo: levers.tempoRamp,
+    seededMutation: levers.mutationRate,
+    flashDuration: Math.round(flashFromProfile),
+  });
+
     levers,
     roundHistory: [],
     leverHistory: [],
@@ -131,6 +142,7 @@ export function updateEngine(
   const leverHistory = [...state.leverHistory, { ...state.levers }];
   let levers = { ...state.levers };
   let { consecutiveMutationSurvives, consecutiveFailedMutations, consecutiveZpdRounds } = state;
+  let branch = 'none';
 
   // Track mutation streaks
   if (roundPerf.mutationSurvived === true) {
@@ -170,26 +182,27 @@ export function updateEngine(
     const avgRt = rollingAvgRt(history, 3);
 
     if (accuracy > cfg.zpdUpper && avgRt < cfg.rtFastThreshold) {
-      // Player is well below ceiling — accelerate all axes
+      branch = 'accel-all';
       levers.sequenceGrowth = Math.min(3, cfg.accelGrowth);
       levers.tempoRamp = cfg.accelTempoRamp;
       levers.flashGapDelta = -15;
       levers.mutationRate = clampMutationRate(levers.mutationRate + 0.15);
     } else if (accuracy > cfg.zpdUpper && avgRt > cfg.rtSlowThreshold) {
-      // Memory fine, speed lagging — push tempo only
+      branch = 'push-tempo';
       levers.sequenceGrowth = 1;
       levers.tempoRamp = cfg.pushTempoRamp;
       levers.flashGapDelta = -10;
     } else if (accuracy > cfg.zpdUpper) {
-      // Accuracy excellent, RT moderate (between fast and slow thresholds)
-      // — steady push across axes without full acceleration
+      branch = 'steady-push';
       levers.sequenceGrowth = 1;
       levers.tempoRamp = cfg.steadyPushTempoRamp;
       levers.flashGapDelta = -8;
       levers.mutationRate = clampMutationRate(levers.mutationRate + 0.08);
     } else if (accuracy >= cfg.overwhelmThreshold && accuracy <= cfg.zpdUpper) {
+      branch = 'zpd-hold';
       consecutiveZpdRounds += 1;
       if (consecutiveZpdRounds >= cfg.plateauBreakThreshold) {
+        branch = 'zpd-plateau-break';
         // Plateau detected — nudge one axis to break monotony.
         // Cycle through: mutation → tempo → sequence growth
         const nudgeAxis = consecutiveZpdRounds % 3;
@@ -208,7 +221,7 @@ export function updateEngine(
         levers.flashGapDelta = 0;
       }
     } else if (accuracy < cfg.overwhelmThreshold) {
-      // Overwhelmed — shrink sequence and slow down to give real relief
+      branch = 'overwhelm';
       levers.sequenceGrowth = accuracy < cfg.overwhelmThreshold - 0.15 ? -2 : -1;
       levers.tempoRamp = cfg.easeTempoRamp;
       levers.flashGapDelta = 20;
@@ -272,6 +285,19 @@ export function updateEngine(
     mutIntensity * 0.20 +
     gridIntensity * 0.15 +
     gapIntensity * 0.15;
+
+  log.engine(`R${currentRound} → ${branch}`, {
+    accuracy: Math.round(rollingAccuracy(history, 3) * 100),
+    avgRt: Math.round(rollingAvgRt(history, 3)),
+    growth: levers.sequenceGrowth,
+    tempo: levers.tempoRamp,
+    flash: Math.round(newFlashDuration),
+    gap: Math.round(newFlashGap),
+    mutRate: Math.round(levers.mutationRate * 100),
+    grid: levers.gridSize,
+    intensity: Math.round(intensityScore * 100),
+    zpdStreak: consecutiveZpdRounds,
+  });
 
   return {
     levers,

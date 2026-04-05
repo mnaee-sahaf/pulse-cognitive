@@ -12,6 +12,7 @@ import {
 } from '../engine/gameStateMachine';
 import type { PlayerProfile } from '../engine/adaptiveEngine';
 import { ENGINE_CONFIG_DEFAULTS, type EngineConfig } from '../engine/engineConfig';
+import { log } from '../lib/devLog';
 
 interface GameStore extends GameState {
   // Actions
@@ -33,8 +34,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
   _watchEndTime: 0,
 
   startSession: (profile, config = ENGINE_CONFIG_DEFAULTS, lives = 3, gameMode = 'arc') => {
+    log.store('startSession', { gameMode, lives, hasProfile: !!profile });
     const initial = createInitialGameState(profile, config, lives, gameMode);
     const firstRound = buildRound(initial);
+    log.phase('session started → watch', {
+      seqLen: firstRound.displaySequence.length,
+      flash: firstRound.flashDuration,
+      grid: firstRound.gridSize,
+      mutation: firstRound.mutation,
+    });
     set({
       ...initial,
       phase: 'watch',
@@ -61,7 +69,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const state = get();
     const { nextState, sessionEnded } = processTap(state, cellIndex, tapTime, state._watchEndTime);
     if (sessionEnded && state.lives > 1) {
+      log.tap('wrong tap → loseLife', { cellIndex, lives: state.lives });
       get().loseLife();
+    } else if (sessionEnded) {
+      log.tap('wrong tap → session ended (last life)', { cellIndex });
+      set(nextState as Partial<GameStore>);
     } else {
       set(nextState as Partial<GameStore>);
     }
@@ -72,6 +84,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (state.gameMode !== 'ember' || state.phase !== 'watch' || !state.round) return;
 
     if (cellIndex === state.round.poisonCell) {
+      log.tap('ember poison tap → loseLife', { cellIndex, lives: state.lives });
       get().loseLife();
       return;
     }
@@ -92,11 +105,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const allHit = state.emberHits >= total;
 
     if (allHit) {
-      // All intercepted — advanceRound (feedback phase) handles scoring via tapResults
+      log.phase('ember sequence complete → feedback', { hits: state.emberHits, total });
       set({ phase: 'feedback' });
     } else {
-      // Missed some — add miss totals for accuracy tracking, then lose a life
       const missCount = total - state.emberHits;
+      log.phase('ember sequence missed → loseLife', { hits: state.emberHits, total, missCount, lives: state.lives });
       set({ sessionTotal: state.sessionTotal + missCount });
       get().loseLife();
     }
@@ -104,6 +117,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   loseLife: () => {
     const state = get();
+    log.phase(`loseLife — ${state.lives - 1} remaining`, { lives: state.lives, round: state.roundCount });
     if (state.lives > 1) {
       // Record the failed round so the engine learns from it (mutationSurvived: false,
       // reduced accuracy) before building the recovery round.
@@ -152,7 +166,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
         perfectStreak: 0,
       });
     } else {
-      set({ phase: 'ended', lives: 0, summary: buildSummary(state) });
+      const summary = buildSummary(state);
+      log.phase('session ended', {
+        rounds: summary.roundsCompleted,
+        score: summary.totalScore,
+        accuracy: Math.round(summary.accuracy * 100),
+        avgRt: Math.round(summary.avgRt),
+        intensity: Math.round(summary.engineIntensity * 100),
+        maxSeq: summary.maxSequenceLength,
+      });
+      set({ phase: 'ended', lives: 0, summary });
     }
   },
 
@@ -163,6 +186,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const updates = completeRound(state);
     const merged = { ...state, ...updates };
     const nextRound = buildRound(merged as GameState);
+
+    log.phase(`R${merged.roundCount} → watch`, {
+      seqLen: nextRound.displaySequence.length,
+      flash: nextRound.flashDuration,
+      gap: nextRound.flashGap,
+      grid: nextRound.gridSize,
+      mutation: nextRound.mutation,
+      score: merged.totalScore,
+      streak: (merged as GameState).perfectStreak,
+    });
 
     set({
       ...(updates as Partial<GameStore>),
