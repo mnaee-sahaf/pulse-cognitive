@@ -57,13 +57,31 @@ export function initEngine(
 ): EngineState {
   const p = profile ?? DEFAULT_PROFILE;
 
-  // Seed initial levers from player profile
+  // Seed initial levers via linear interpolation from player profile.
+  // This produces a smooth starting difficulty curve instead of binary splits.
+
+  // sequenceGrowth: wmCapacity 3→1, 5→1, 7→2, 9+→3
+  const growthFromWm = Math.max(1, Math.min(3, Math.round((p.wmCapacity - 3) / 2)));
+
+  // tempoRamp: baselineRt 200ms→-30 (aggressive), 350ms→-20, 500ms→-10 (gentle)
+  const rtNorm = Math.max(0, Math.min(1, (p.baselineRt - 200) / 300)); // 0=fast, 1=slow
+  const tempoFromRt = config.accelTempoRamp + rtNorm * (config.defaultTempoRamp - config.accelTempoRamp);
+
+  // mutationRate: flexRating 0→0, 0.5→0.1, 1.0→0.25
+  const mutationFromFlex = Math.min(0.25, p.flexRating * 0.25);
+
+  // flashGapDelta: faster players start with tighter gaps
+  const gapFromRt = rtNorm > 0.5 ? 0 : -5;
+
+  // Initial flash duration: slightly faster for experienced players
+  const flashFromProfile = config.initialFlashDuration - (1 - rtNorm) * 50;
+
   const levers: LeverSettings = {
-    sequenceGrowth: p.wmCapacity >= 6 ? 2 : 1,
-    tempoRamp: p.baselineRt < 350 ? config.pushTempoRamp : config.defaultTempoRamp,
-    mutationRate: p.flexRating > 0.6 ? 0.2 : 0,
+    sequenceGrowth: growthFromWm,
+    tempoRamp: Math.round(tempoFromRt),
+    mutationRate: Math.round(mutationFromFlex * 100) / 100,
     gridSize: 3,
-    flashGapDelta: 0,
+    flashGapDelta: gapFromRt,
   };
 
   return {
@@ -74,7 +92,7 @@ export function initEngine(
     consecutiveFailedMutations: 0,
     consecutiveZpdRounds: 0,
     intensity: 0,
-    currentFlashDuration: config.initialFlashDuration,
+    currentFlashDuration: Math.round(flashFromProfile),
     currentFlashGap: config.initialFlashGap,
     config,
   };
