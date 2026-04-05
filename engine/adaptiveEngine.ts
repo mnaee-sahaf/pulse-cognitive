@@ -347,7 +347,9 @@ export function updateEngine(
 
 /**
  * Decides whether to introduce a mutation this round and which type.
- * Prefers simpler mutations (Poison) when player is struggling.
+ * At low mutation rates, only simple mutations are used.
+ * At higher rates (>0.25), advanced mutations (colorSwitch, parity, double) enter the pool.
+ * Prefers simpler mutations when player is struggling.
  */
 export function selectMutation(
   levers: LeverSettings,
@@ -360,7 +362,21 @@ export function selectMutation(
     return 'poison';
   }
 
+  // At higher mutation rates, introduce advanced mutations
+  const useAdvanced = levers.mutationRate > 0.25;
   const roll = Math.random();
+
+  if (useAdvanced) {
+    // 6-way pool: poison, mirror, reverse, colorSwitch, parity, double
+    if (roll < 0.15) return 'poison';
+    if (roll < 0.30) return 'mirror';
+    if (roll < 0.45) return 'reverse';
+    if (roll < 0.60) return 'colorSwitch';
+    if (roll < 0.80) return 'parity';
+    return 'double';
+  }
+
+  // Standard 3-way pool at lower rates
   if (roll < 0.33) return 'poison';
   if (roll < 0.66) return 'mirror';
   return 'reverse';
