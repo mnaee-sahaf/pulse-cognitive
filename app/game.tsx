@@ -84,28 +84,26 @@ export default function GameScreen() {
     // HALT mode: single cell flash with response window timeout
     if (gameMode === 'halt') {
       haltTappedRef.current = false;
-      flashStartRef.current = performance.now();
       const targetCell = round.displaySequence[0];
-      setFlashIndex(targetCell);
+      const responseWindow = round.responseWindow ?? 1200;
 
-      // For stop-signal trials, change visual after delay (handled via poisonCell)
-      if (round.trialType === 'stop' && round.stopSignalDelay) {
-        flashTimerRef.current = setTimeout(() => {
-          // Signal the stop by making the cell look like poison (red)
-          // We reuse the round state's poisonCell for visual purposes
-        }, round.stopSignalDelay);
-      }
+      // Brief pause before showing the stimulus (matches other modes)
+      const HALT_PRE_DELAY = 500;
+      const preTimer = setTimeout(() => {
+        flashStartRef.current = performance.now();
+        setFlashIndex(targetCell);
 
-      // Response window timeout
-      const responseWindow = round.responseWindow ?? 800;
-      haltTimeoutRef.current = setTimeout(() => {
-        setFlashIndex(-1);
-        if (!haltTappedRef.current) {
-          handleHaltTimeout();
-        }
-      }, responseWindow);
+        // Response window starts when cell appears
+        haltTimeoutRef.current = setTimeout(() => {
+          setFlashIndex(-1);
+          if (!haltTappedRef.current) {
+            handleHaltTimeout();
+          }
+        }, responseWindow);
+      }, HALT_PRE_DELAY);
 
       return () => {
+        clearTimeout(preTimer);
         if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
         if (haltTimeoutRef.current) clearTimeout(haltTimeoutRef.current);
       };
@@ -152,7 +150,9 @@ export default function GameScreen() {
   useEffect(() => {
     if (phase !== 'feedback') return;
     if (hapticFeedback) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    const t = setTimeout(() => advanceRound(), 600);
+    // HALT trials advance faster (200ms) since each trial is a single stimulus
+    const delay = gameMode === 'halt' ? 200 : 600;
+    const t = setTimeout(() => advanceRound(), delay);
     return () => clearTimeout(t);
   }, [phase]);
 

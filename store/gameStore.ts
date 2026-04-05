@@ -211,6 +211,27 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const state = get();
     log.phase(`loseLife — ${state.lives - 1} remaining`, { lives: state.lives, round: state.roundCount });
     if (state.lives > 1) {
+      // HALT mode: simpler recovery — just build a new trial, use feedback phase
+      // for a brief visual pause before the next trial starts.
+      if (state.gameMode === 'halt') {
+        const nextState: GameState = {
+          ...state,
+          lives: state.lives - 1,
+          roundCount: state.roundCount + 1,
+        };
+        const newRound = buildRound(nextState);
+        set({
+          lives: state.lives - 1,
+          roundCount: nextState.roundCount,
+          tapResults: [],
+          recallProgress: [],
+          phase: 'feedback', // will trigger advanceHaltTrial after delay
+          round: newRound,
+          currentFlashIndex: -1,
+        });
+        return;
+      }
+
       // Record the failed round so the engine learns from it (mutationSurvived: false,
       // reduced accuracy) before building the recovery round.
       const { engine: failedEngine } = applyFailedRound(state);

@@ -199,7 +199,7 @@ export function buildRound(state: GameState): RoundState {
       gridSize,
       trialType,
       stopSignalDelay: trialType === 'stop' ? state.haltSsd : undefined,
-      responseWindow: Math.max(400, state.engine.currentFlashDuration + 200),
+      responseWindow: Math.max(800, state.engine.currentFlashDuration + 400),
     };
   }
   // Start at length 1 so round 1 adds sequenceGrowth (1) → first sequence is 2 cells.
