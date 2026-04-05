@@ -121,16 +121,12 @@ export default function GameScreen() {
   }, [phase]);
 
   // Navigate to results when session ends (guard against double-navigation).
-  // Uses requestAnimationFrame to ensure the store update has flushed to React
-  // before navigation, preventing the results screen from seeing stale state.
   const navigatedRef = useRef(false);
   useEffect(() => {
     if (phase === 'ended' && !navigatedRef.current) {
       navigatedRef.current = true;
       log.nav('session ended → navigating to /results', { hasSummary: !!state.summary });
-      requestAnimationFrame(() => {
-        router.replace('/results');
-      });
+      router.replace('/results');
     }
   }, [phase]);
 
