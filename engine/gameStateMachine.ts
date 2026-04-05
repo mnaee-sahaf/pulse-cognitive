@@ -105,9 +105,11 @@ export function createInitialGameState(
 /** Builds the next round state from engine settings. */
 export function buildRound(state: GameState): RoundState {
   const { levers } = state.engine;
-  // Start at length 1 so round 1 adds sequenceGrowth (1) → first sequence is 2 cells
+  // Start at length 1 so round 1 adds sequenceGrowth (1) → first sequence is 2 cells.
+  // Negative sequenceGrowth shrinks the sequence (floor of 2 to stay playable).
   const prevLength = state.round?.displaySequence.length ?? 1;
-  const newLength = Math.min(prevLength + levers.sequenceGrowth, levers.gridSize * levers.gridSize);
+  const rawLength = prevLength + levers.sequenceGrowth;
+  const newLength = Math.max(2, Math.min(rawLength, levers.gridSize * levers.gridSize));
 
   const displaySequence = generateSequence(newLength, levers.gridSize);
 

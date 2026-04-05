@@ -2,7 +2,7 @@ import type { GridSize, Mutation } from './sequenceGenerator';
 import { ENGINE_CONFIG_DEFAULTS, type EngineConfig } from './engineConfig';
 
 export interface LeverSettings {
-  sequenceGrowth: 0 | 1 | 2 | 3; // elements added per round (0 = hold at current length)
+  sequenceGrowth: number;         // elements added per round (negative = shrink, 0 = hold, positive = grow)
   tempoRamp: number;              // ms delta applied to currentFlashDuration each round (negative: faster, positive: slower)
   mutationRate: number;           // 0.0 – 0.60 chance of mutation this round
   gridSize: GridSize;
@@ -146,7 +146,7 @@ export function updateEngine(
 
     if (accuracy > cfg.zpdUpper && avgRt < cfg.rtFastThreshold) {
       // Player is well below ceiling — accelerate all axes
-      levers.sequenceGrowth = Math.min(3, cfg.accelGrowth) as 0 | 1 | 2 | 3;
+      levers.sequenceGrowth = Math.min(3, cfg.accelGrowth);
       levers.tempoRamp = cfg.accelTempoRamp;
       levers.mutationRate = clampMutationRate(levers.mutationRate + 0.15);
     } else if (accuracy > cfg.zpdUpper && avgRt > cfg.rtSlowThreshold) {
@@ -164,8 +164,8 @@ export function updateEngine(
       levers.sequenceGrowth = 0;
       levers.tempoRamp = 0;
     } else if (accuracy < cfg.overwhelmThreshold) {
-      // Overwhelmed — ease back and slow down
-      levers.sequenceGrowth = 1;
+      // Overwhelmed — shrink sequence and slow down to give real relief
+      levers.sequenceGrowth = accuracy < cfg.overwhelmThreshold - 0.15 ? -2 : -1;
       levers.tempoRamp = cfg.easeTempoRamp;
       levers.mutationRate = clampMutationRate(levers.mutationRate - 0.15);
     }

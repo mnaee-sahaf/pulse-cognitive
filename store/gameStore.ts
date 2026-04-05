@@ -111,7 +111,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       // Suppress sequence growth for this recovery round only.
       const recoveryEngine = {
         ...failedEngine,
-        levers: { ...failedEngine.levers, sequenceGrowth: 0 as const },
+        levers: { ...failedEngine.levers, sequenceGrowth: 0 },
       };
       const rebuiltState: GameState = {
         ...state,
