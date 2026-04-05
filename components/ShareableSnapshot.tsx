@@ -1,9 +1,16 @@
 import React, { useRef, useCallback } from 'react';
 import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
-import ViewShot from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { Colors, FontSize, Spacing } from '../constants/theme';
 import type { CognitiveScores } from '../engine/scoring';
+
+// ViewShot may fail with New Architecture — import safely
+let ViewShot: any = View;
+try {
+  ViewShot = require('react-native-view-shot').default;
+} catch {
+  // fallback to plain View if native module unavailable
+}
 
 interface ShareableSnapshotProps {
   totalScore: number;
