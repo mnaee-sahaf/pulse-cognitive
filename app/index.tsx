@@ -4,11 +4,12 @@ import {
   Text,
   Pressable,
   StyleSheet,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Colors, FontSize, Spacing } from '../constants/theme';
-import { getLifetimeStats } from '../db/sessions';
+import { getLifetimeStats, getCognitiveProfile } from '../db/sessions';
 import {
   loadCompanion,
   getAllCompanions,
@@ -16,19 +17,23 @@ import {
   type CompanionState,
   type CompanionId,
 } from '../db/companion';
-import { loadPurchaseState, isCompanionUnlocked, type PurchaseState } from '../db/purchaseState';
+import { loadPurchaseState, type PurchaseState } from '../db/purchaseState';
+import { loadStreakState, getStreakLabel, type StreakState } from '../db/streaks';
 import { Companion } from '../components/Companion';
 import { CompanionSwitcher } from '../components/CompanionSwitcher';
 import { UpgradePrompt } from '../components/UpgradePrompt';
+import { CognitiveRadar, type RadarDimension } from '../components/CognitiveRadar';
 import { AnimatedBackground } from '../components/AnimatedBackground';
 import { useAppSettings } from '../store/appSettingsStore';
 
 export default function HomeScreen() {
   const router = useRouter();
   const [stats, setStats] = useState({ sessionCount: 0, bestRt: 0, avgScore: 0 });
+  const [cogProfile, setCogProfile] = useState({ rtScore: 0, wmScore: 0, flexScore: 0, decisionScore: 0 });
   const [companion, setCompanion] = useState<CompanionState | null>(null);
   const [allCompanions, setAllCompanions] = useState<CompanionState[]>([]);
   const [purchaseState, setPurchaseState] = useState<PurchaseState | null>(null);
+  const [streak, setStreak] = useState<StreakState>({ currentStreak: 0, bestStreak: 0, lastSessionDate: null, frozen: false });
   const [switcherVisible, setSwitcherVisible] = useState(false);
   const [upgradeVisible, setUpgradeVisible] = useState(false);
   const animatedBackground = useAppSettings((s) => s.animatedBackground);
@@ -36,6 +41,7 @@ export default function HomeScreen() {
 
   const loadData = useCallback(() => {
     getLifetimeStats().then(setStats).catch(console.error);
+    getCognitiveProfile().then(setCogProfile).catch(console.error);
     loadCompanion().then((c) => {
       if (!c) {
         router.replace('/choose-companion');
@@ -45,6 +51,7 @@ export default function HomeScreen() {
     }).catch(console.error);
     getAllCompanions().then(setAllCompanions).catch(console.error);
     loadPurchaseState().then(setPurchaseState).catch(console.error);
+    loadStreakState().then(setStreak).catch(console.error);
   }, []);
 
   useFocusEffect(loadData);
@@ -56,11 +63,26 @@ export default function HomeScreen() {
   }, [loadData]);
 
   const hasStats = stats.sessionCount > 0;
+  const isFullUnlock = purchaseState?.fullUnlock ?? false;
+  const activeMode = companion?.companionId ?? 'arc';
+
+  // Build radar dimensions — lock dimensions not trained by the active mode
+  const radarDims: RadarDimension[] = [
+    { label: 'Reaction Speed', shortLabel: 'RT', value: cogProfile.rtScore, color: Colors.accent, locked: !isFullUnlock && activeMode !== 'ember' },
+    { label: 'Working Memory', shortLabel: 'WM', value: cogProfile.wmScore, color: '#8B5CF6', locked: !isFullUnlock && activeMode !== 'arc' },
+    { label: 'Flexibility', shortLabel: 'FLEX', value: cogProfile.flexScore, color: Colors.warning, locked: !isFullUnlock && activeMode !== 'tide' },
+    { label: 'Decision Speed', shortLabel: 'DEC', value: cogProfile.decisionScore, color: Colors.success, locked: false },
+  ];
+
+  const streakLabel = getStreakLabel(streak.currentStreak);
 
   return (
     <SafeAreaView style={styles.safe}>
       {animatedBackground && <AnimatedBackground intensity={backgroundIntensity} />}
-      <View style={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.header}>
           <Text style={styles.logo}>
             pulse<Text style={styles.dot}>.</Text>
@@ -73,15 +95,46 @@ export default function HomeScreen() {
             onPress={() => setSwitcherVisible(true)}
             style={({ pressed }) => [styles.companionTap, pressed && { opacity: 0.8 }]}
           >
-            <Companion state={companion} size={72} showInfo={true} />
+            <Companion state={companion} size={64} showInfo={true} />
             <Text style={styles.switchHint}>TAP TO SWITCH MODE</Text>
           </Pressable>
         )}
 
+        {/* Streak display */}
+        {streak.currentStreak > 0 && (
+          <View style={styles.streakRow}>
+            <Text style={styles.streakFire}>{streak.currentStreak >= 7 ? '\uD83D\uDD25' : '\u26A1'}</Text>
+            <View style={styles.streakInfo}>
+              <Text style={styles.streakCount}>{streak.currentStreak} day streak</Text>
+              {streakLabel && <Text style={styles.streakBadge}>{streakLabel}</Text>}
+              {streak.frozen && <Text style={styles.streakFrozen}>FROZEN — play today to keep it</Text>}
+            </View>
+            {streak.bestStreak > streak.currentStreak && (
+              <Text style={styles.streakBest}>Best: {streak.bestStreak}</Text>
+            )}
+          </View>
+        )}
+
+        {/* Cognitive radar chart */}
+        {hasStats && (
+          <View style={styles.radarSection}>
+            <Text style={styles.sectionLabel}>COGNITIVE PROFILE</Text>
+            <CognitiveRadar dimensions={radarDims} size={180} />
+            {!isFullUnlock && (
+              <Pressable onPress={() => setUpgradeVisible(true)}>
+                <Text style={styles.radarHint}>
+                  Unlock all modes to build a complete profile
+                </Text>
+              </Pressable>
+            )}
+          </View>
+        )}
+
+        {/* Stats row */}
         <View style={styles.metricsRow}>
-          <MetricBlock label="Sessions" value={hasStats ? String(stats.sessionCount) : '—'} />
-          <MetricBlock label="Best RT" value={hasStats ? `${stats.bestRt}ms` : '—'} />
-          <MetricBlock label="Avg Score" value={hasStats ? String(stats.avgScore) : '—'} />
+          <MetricBlock label="Sessions" value={hasStats ? String(stats.sessionCount) : '\u2014'} />
+          <MetricBlock label="Best RT" value={hasStats ? `${stats.bestRt}ms` : '\u2014'} />
+          <MetricBlock label="Avg Score" value={hasStats ? String(stats.avgScore) : '\u2014'} />
         </View>
 
         <Pressable
@@ -103,12 +156,12 @@ export default function HomeScreen() {
               style={({ pressed }) => [styles.secondaryBtn, styles.settingsBtn, pressed && styles.ctaPressed]}
               onPress={() => router.push('/settings')}
             >
-              <Text style={styles.secondaryBtnText}>⚙</Text>
+              <Text style={styles.secondaryBtnText}>{'\u2699'}</Text>
             </Pressable>
           </View>
           <Text style={styles.hint}>60 seconds · 4 cognitive metrics</Text>
         </View>
-      </View>
+      </ScrollView>
 
       <CompanionSwitcher
         visible={switcherVisible}
@@ -127,7 +180,7 @@ export default function HomeScreen() {
           visible={upgradeVisible}
           freeCompanionId={purchaseState.freeCompanionId}
           onPurchase={() => {
-            // TODO: wire up IAP via RevenueCat or expo-in-app-purchases
+            // TODO: wire up IAP via RevenueCat
             setUpgradeVisible(false);
           }}
           onDismiss={() => setUpgradeVisible(false)}
@@ -148,13 +201,12 @@ function MetricBlock({ label, value }: { label: string; value: string }) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.background },
-  container: {
-    flex: 1,
+  scroll: {
     paddingHorizontal: Spacing.pagePadding,
     paddingTop: 32,
     paddingBottom: 32,
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 20,
   },
   header: { alignItems: 'center', gap: 8 },
   logo: {
@@ -182,6 +234,65 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     textTransform: 'uppercase',
   },
+  // Streak
+  streakRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    width: '100%',
+  },
+  streakFire: { fontSize: 20 },
+  streakInfo: { flex: 1, gap: 2 },
+  streakCount: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  streakBadge: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Colors.warning,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  streakFrozen: {
+    fontSize: 9,
+    color: Colors.danger,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    fontWeight: '600',
+  },
+  streakBest: {
+    fontSize: FontSize.label,
+    color: Colors.textTertiary,
+  },
+  // Radar
+  radarSection: {
+    alignItems: 'center',
+    gap: 8,
+    width: '100%',
+  },
+  sectionLabel: {
+    fontSize: FontSize.label,
+    fontWeight: '500',
+    color: Colors.textTertiary,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    alignSelf: 'flex-start',
+  },
+  radarHint: {
+    fontSize: 11,
+    color: Colors.accent,
+    fontWeight: '500',
+    letterSpacing: 0.3,
+  },
+  // Metrics
   metricsRow: { flexDirection: 'row', gap: 24 },
   metricBlock: { alignItems: 'center', gap: 4, minWidth: 72 },
   metricValue: {

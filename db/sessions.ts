@@ -119,6 +119,32 @@ export async function getProfileSeedData(n = 10): Promise<{
   };
 }
 
+/**
+ * Returns rolling average cognitive scores from recent sessions.
+ */
+export async function getCognitiveProfile(n = 10): Promise<{
+  rtScore: number;
+  wmScore: number;
+  flexScore: number;
+  decisionScore: number;
+}> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<any>(
+    `SELECT
+      AVG(rt_score) as rt, AVG(wm_score) as wm,
+      AVG(flex_score) as flex, AVG(decision_score) as decision
+     FROM (SELECT rt_score, wm_score, flex_score, decision_score
+           FROM sessions ORDER BY timestamp DESC LIMIT ?)`,
+    [n]
+  );
+  return {
+    rtScore: Math.round(row?.rt ?? 0),
+    wmScore: Math.round(row?.wm ?? 0),
+    flexScore: Math.round(row?.flex ?? 0),
+    decisionScore: Math.round(row?.decision ?? 0),
+  };
+}
+
 function deserializeSession(row: any): StoredSession {
   return {
     id: row.id,
