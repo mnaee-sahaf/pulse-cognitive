@@ -68,12 +68,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
   handleTap: (cellIndex, tapTime) => {
     const state = get();
     const { nextState, sessionEnded } = processTap(state, cellIndex, tapTime, state._watchEndTime);
-    if (sessionEnded && state.lives > 1) {
+    if (sessionEnded) {
+      // Always route through loseLife for wrong taps — it handles both
+      // recovery (lives > 1) and session end (last life) consistently,
+      // including setting lives=0, building summary, and logging.
+      // The processTap nextState (which sets phase='ended' directly) was
+      // bypassing loseLife and failing to trigger the navigation effect.
       log.tap('wrong tap → loseLife', { cellIndex, lives: state.lives });
       get().loseLife();
-    } else if (sessionEnded) {
-      log.tap('wrong tap → session ended (last life)', { cellIndex });
-      set(nextState as Partial<GameStore>);
     } else {
       set(nextState as Partial<GameStore>);
     }
