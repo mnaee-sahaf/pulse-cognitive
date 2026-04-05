@@ -73,7 +73,7 @@ export interface GameState {
   emberHits: number;          // Ember mode: cells intercepted in current watch sequence
 }
 
-const INITIAL_FLASH_GAP = 250; // ms between cells
+// Flash gap is now adaptive — sourced from engine state, not a constant
 
 export function createInitialGameState(
   profile: PlayerProfile | null,
@@ -135,7 +135,7 @@ export function buildRound(state: GameState): RoundState {
     mutation,
     poisonCell,
     flashDuration: state.engine.currentFlashDuration,
-    flashGap: INITIAL_FLASH_GAP,
+    flashGap: state.engine.currentFlashGap,
     gridSize: levers.gridSize,
   };
 }

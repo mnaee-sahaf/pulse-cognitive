@@ -8,6 +8,11 @@ export interface EngineConfig {
   flashFloor: number;           // minimum flash ms (default: 300)
   flashCeiling: number;         // maximum flash ms — hard cap when easing back (default: 800)
 
+  // Flash gap (inter-cell pause) bounds
+  initialFlashGap: number;      // starting gap between cell flashes (default: 250)
+  flashGapFloor: number;        // minimum gap ms (default: 120)
+  flashGapCeiling: number;      // maximum gap ms (default: 400)
+
   // Accuracy decision thresholds
   overwhelmThreshold: number;   // accuracy below this → ease back (default: 0.80)
   zpdUpper: number;             // accuracy above this → push harder (default: 0.90)
@@ -42,6 +47,9 @@ export const ENGINE_CONFIG_DEFAULTS: EngineConfig = {
   initialFlashDuration: 600,
   flashFloor: 300,
   flashCeiling: 800,
+  initialFlashGap: 250,
+  flashGapFloor: 120,
+  flashGapCeiling: 400,
   overwhelmThreshold: 0.8,
   zpdUpper: 0.9,
   rtFastThreshold: 350,

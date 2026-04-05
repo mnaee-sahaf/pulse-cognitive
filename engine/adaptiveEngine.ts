@@ -6,6 +6,7 @@ export interface LeverSettings {
   tempoRamp: number;              // ms delta applied to currentFlashDuration each round (negative: faster, positive: slower)
   mutationRate: number;           // 0.0 – 0.60 chance of mutation this round
   gridSize: GridSize;
+  flashGapDelta: number;          // ms delta applied to inter-cell gap each round (negative = tighter, positive = more breathing room)
 }
 
 export interface RoundPerformance {
@@ -30,6 +31,7 @@ export interface EngineState {
   consecutiveFailedMutations: number;
   intensity: number;             // 0.0–1.0 snapshot of how hard the engine is pushing
   currentFlashDuration: number;  // ms — accumulates tempo deltas each round
+  currentFlashGap: number;       // ms — accumulates gap deltas each round
   config: EngineConfig;          // tuning config snapshot for this session
 }
 
@@ -38,6 +40,7 @@ const DEFAULT_LEVERS: LeverSettings = {
   tempoRamp: -10,
   mutationRate: 0,
   gridSize: 3,
+  flashGapDelta: 0,
 };
 
 const DEFAULT_PROFILE: PlayerProfile = {
@@ -59,6 +62,7 @@ export function initEngine(
     tempoRamp: p.baselineRt < 350 ? config.pushTempoRamp : config.defaultTempoRamp,
     mutationRate: p.flexRating > 0.6 ? 0.2 : 0,
     gridSize: 3,
+    flashGapDelta: 0,
   };
 
   return {
@@ -69,6 +73,7 @@ export function initEngine(
     consecutiveFailedMutations: 0,
     intensity: 0,
     currentFlashDuration: config.initialFlashDuration,
+    currentFlashGap: config.initialFlashGap,
     config,
   };
 }
@@ -148,25 +153,30 @@ export function updateEngine(
       // Player is well below ceiling — accelerate all axes
       levers.sequenceGrowth = Math.min(3, cfg.accelGrowth);
       levers.tempoRamp = cfg.accelTempoRamp;
+      levers.flashGapDelta = -15;
       levers.mutationRate = clampMutationRate(levers.mutationRate + 0.15);
     } else if (accuracy > cfg.zpdUpper && avgRt > cfg.rtSlowThreshold) {
       // Memory fine, speed lagging — push tempo only
       levers.sequenceGrowth = 1;
       levers.tempoRamp = cfg.pushTempoRamp;
+      levers.flashGapDelta = -10;
     } else if (accuracy > cfg.zpdUpper) {
       // Accuracy excellent, RT moderate (between fast and slow thresholds)
       // — steady push across axes without full acceleration
       levers.sequenceGrowth = 1;
       levers.tempoRamp = cfg.steadyPushTempoRamp;
+      levers.flashGapDelta = -8;
       levers.mutationRate = clampMutationRate(levers.mutationRate + 0.08);
     } else if (accuracy >= cfg.overwhelmThreshold && accuracy <= cfg.zpdUpper) {
       // Target ZPD — hold steady, don't grow sequence
       levers.sequenceGrowth = 0;
       levers.tempoRamp = 0;
+      levers.flashGapDelta = 0;
     } else if (accuracy < cfg.overwhelmThreshold) {
       // Overwhelmed — shrink sequence and slow down to give real relief
       levers.sequenceGrowth = accuracy < cfg.overwhelmThreshold - 0.15 ? -2 : -1;
       levers.tempoRamp = cfg.easeTempoRamp;
+      levers.flashGapDelta = 20;
       levers.mutationRate = clampMutationRate(levers.mutationRate - 0.15);
     }
 
@@ -200,6 +210,12 @@ export function updateEngine(
     Math.max(cfg.flashFloor, state.currentFlashDuration + levers.tempoRamp)
   );
 
+  // Accumulate flash gap: tighter gaps = faster pacing, wider = more breathing room
+  const newFlashGap = Math.min(
+    cfg.flashGapCeiling,
+    Math.max(cfg.flashGapFloor, state.currentFlashGap + levers.flashGapDelta)
+  );
+
   // Compute intensity (0–1) — how hard the engine is pushing
   const intensityScore =
     ((levers.sequenceGrowth - 1) / 2) * 0.3 +
@@ -214,6 +230,7 @@ export function updateEngine(
     consecutiveFailedMutations,
     intensity: Math.min(1, intensityScore),
     currentFlashDuration: newFlashDuration,
+    currentFlashGap: newFlashGap,
     config: state.config,
   };
 }
