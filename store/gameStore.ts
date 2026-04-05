@@ -129,6 +129,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         phase: 'watch',
         round: newRound,
         emberHits: 0,
+        perfectStreak: 0,
       });
     } else {
       set({ phase: 'ended', lives: 0, summary: buildSummary(state) });

@@ -51,6 +51,7 @@ export interface SessionSummary {
   mutationsSurvived: number;
   engineIntensity: number;
   cognitiveScores: CognitiveScores;
+  bestStreak: number;
 }
 
 export interface GameState {
@@ -71,6 +72,7 @@ export interface GameState {
   lives: number;              // remaining lives (session ends at 0)
   gameMode: GameMode;
   emberHits: number;          // Ember mode: cells intercepted in current watch sequence
+  perfectStreak: number;      // consecutive perfect rounds (no wrong taps) — resets on life loss
 }
 
 // Flash gap is now adaptive — sourced from engine state, not a constant
@@ -99,6 +101,7 @@ export function createInitialGameState(
     lives: startingLives,
     gameMode,
     emberHits: 0,
+    perfectStreak: 0,
   };
 }
 
@@ -244,11 +247,14 @@ export function completeRound(state: GameState): Partial<GameState> {
     mutationSurvived,
   };
 
+  const newPerfectStreak = state.perfectStreak + 1;
+
   const roundScore = calcRoundScore({
     sequenceLength: state.round.displaySequence.length,
     tapRts: state.tapResults.map((t) => t.rt),
     mutationActive: state.round.mutation !== 'none',
     engineIntensity: state.engine.intensity,
+    perfectStreak: newPerfectStreak,
   });
 
   const newEngine = updateEngine(state.engine, roundPerf, state.roundCount);
@@ -264,6 +270,7 @@ export function completeRound(state: GameState): Partial<GameState> {
     mutationsFaced: newMutationsFaced,
     mutationsSurvived: newMutationsSurvived,
     roundCount: state.roundCount + 1,
+    perfectStreak: newPerfectStreak,
     tapResults: [],
     recallProgress: [],
   };
@@ -327,5 +334,6 @@ export function buildSummary(state: GameState): SessionSummary {
     mutationsSurvived: state.mutationsSurvived,
     engineIntensity: state.engine.intensity,
     cognitiveScores,
+    bestStreak: state.perfectStreak,
   };
 }

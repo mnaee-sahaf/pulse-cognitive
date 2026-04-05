@@ -32,6 +32,7 @@ export default function GameScreen() {
     lives,
     gameMode,
     emberHits,
+    perfectStreak,
     setFlashIndex,
     startRecall,
     handleTap,
@@ -248,6 +249,11 @@ export default function GameScreen() {
                 />
               ))}
             </View>
+            {perfectStreak >= 2 && (
+              <Text style={[styles.streakBadge, { color: modeColor }]}>
+                {perfectStreak}x STREAK
+              </Text>
+            )}
           </View>
           <View style={styles.hudRight}>
             <Text style={styles.roundNum}>R{roundCount}</Text>
@@ -409,6 +415,12 @@ const styles = StyleSheet.create({
   lifesDotActive: {
     backgroundColor: Colors.danger,
     borderColor: Colors.danger,
+  },
+  streakBadge: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginTop: 2,
   },
   seqRow: {
     flexDirection: 'row',
