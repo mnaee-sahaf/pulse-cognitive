@@ -33,10 +33,10 @@ import type { GameMode } from '../engine/gameStateMachine';
 
 // Which cognitive dimensions each mode actively trains
 const MODE_ACTIVE_DIMS: Record<GameMode, Set<string>> = {
-  arc: new Set(['Working Memory', 'Decision Speed']),
-  tide: new Set(['Flexibility', 'Decision Speed']),
-  ember: new Set(['Reaction Speed', 'Decision Speed']),
-  halt: new Set(['Impulse Control', 'Decision Speed']),
+  arc: new Set(['Working Memory', 'Decision Efficiency']),
+  tide: new Set(['Flexibility', 'Decision Efficiency']),
+  ember: new Set(['Processing Speed', 'Decision Efficiency']),
+  halt: new Set(['Impulse Control', 'Decision Efficiency']),
 };
 
 function buildNudge(
@@ -135,10 +135,10 @@ export default function ResultsScreen() {
   const isFullUnlock = purchaseState?.fullUnlock ?? false;
 
   const metrics = [
-    { label: 'Reaction Speed', score: cognitiveScores.rtScore, color: Colors.accent },
+    { label: 'Processing Speed', score: cognitiveScores.rtScore, color: Colors.accent },
     { label: 'Working Memory', score: cognitiveScores.wmScore, color: '#8B5CF6' },
     { label: 'Flexibility', score: cognitiveScores.flexScore, color: Colors.warning },
-    { label: 'Decision Speed', score: cognitiveScores.decisionScore, color: Colors.success },
+    { label: 'Decision Efficiency', score: cognitiveScores.decisionScore, color: Colors.success },
     { label: 'Impulse Control', score: cognitiveScores.impulseScore, color: '#10B981' },
   ].map((m) => ({
     ...m,

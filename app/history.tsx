@@ -136,7 +136,7 @@ function AvgProfileBars({ sessions }: { sessions: StoredSession[] }) {
 
   const metrics = [
     {
-      label: 'Reaction Speed',
+      label: 'Processing Speed',
       score: Math.round(avg(sessions.map((s) => s.rtScore))),
       color: Colors.accent,
     },
@@ -151,7 +151,7 @@ function AvgProfileBars({ sessions }: { sessions: StoredSession[] }) {
       color: Colors.warning,
     },
     {
-      label: 'Decision Speed',
+      label: 'Decision Efficiency',
       score: Math.round(avg(sessions.map((s) => s.decisionScore))),
       color: Colors.success,
     },

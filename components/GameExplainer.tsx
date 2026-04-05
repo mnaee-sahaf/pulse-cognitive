@@ -41,7 +41,7 @@ const EXPLAINERS: Record<GameMode, ExplainerContent> = {
   ember: {
     title: 'Ember',
     modeLabel: 'INTERCEPT',
-    focus: 'Reaction Speed',
+    focus: 'Processing Speed',
     color: COMPANIONS.ember.stages[0].primaryColor,
     steps: [
       'Cells light up one at a time',

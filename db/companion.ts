@@ -33,7 +33,7 @@ export const COMPANIONS: Record<CompanionId, CompanionDefinition> = {
     name: 'Ember',
     description: 'Reactive and intense. Thrives under pressure.',
     modeLabel: 'INTERCEPT',
-    trainingFocus: 'Reaction Speed',
+    trainingFocus: 'Processing Speed',
     stages: [
       { level: 1,  label: 'Spark',   primaryColor: '#FF6B35', secondaryColor: '#FFE0D0', shape: 'square' },
       { level: 20, label: 'Flare',   primaryColor: '#FF4500', secondaryColor: '#FFD0B0', shape: 'square' },

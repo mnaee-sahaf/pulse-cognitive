@@ -68,10 +68,10 @@ export default function HomeScreen() {
 
   // Build radar dimensions — lock dimensions not trained by the active mode
   const radarDims: RadarDimension[] = [
-    { label: 'Reaction Speed', shortLabel: 'RT', value: cogProfile.rtScore, color: Colors.accent, locked: !isFullUnlock && activeMode !== 'ember' },
+    { label: 'Processing Speed', shortLabel: 'RT', value: cogProfile.rtScore, color: Colors.accent, locked: !isFullUnlock && activeMode !== 'ember' },
     { label: 'Working Memory', shortLabel: 'WM', value: cogProfile.wmScore, color: '#8B5CF6', locked: !isFullUnlock && activeMode !== 'arc' },
     { label: 'Flexibility', shortLabel: 'FLEX', value: cogProfile.flexScore, color: Colors.warning, locked: !isFullUnlock && activeMode !== 'tide' },
-    { label: 'Decision Speed', shortLabel: 'DEC', value: cogProfile.decisionScore, color: Colors.success, locked: false },
+    { label: 'Decision Efficiency', shortLabel: 'DEC', value: cogProfile.decisionScore, color: Colors.success, locked: false },
   ];
 
   const streakLabel = getStreakLabel(streak.currentStreak);

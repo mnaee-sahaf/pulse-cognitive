@@ -15,7 +15,7 @@ interface UpgradePromptProps {
 const DIMENSION_MAP: Record<CompanionId, string> = {
   arc: 'Working Memory',
   tide: 'Cognitive Flexibility',
-  ember: 'Reaction Speed',
+  ember: 'Processing Speed',
   halt: 'Impulse Control',
 };
 
@@ -121,7 +121,7 @@ export function UpgradePrompt({ visible, freeCompanionId, onPurchase, onDismiss 
               })}
               <View style={styles.dimRow}>
                 <View style={[styles.dimDot, { backgroundColor: Colors.success }]} />
-                <Text style={styles.dimText}>Decision Speed</Text>
+                <Text style={styles.dimText}>Decision Efficiency</Text>
                 <Text style={styles.freeLabel}>FREE</Text>
               </View>
             </View>

@@ -82,7 +82,7 @@ const MODE_DETAILS: Record<CompanionId, ModeDetail> = {
   ember: {
     title: 'Ember',
     modeLabel: 'INTERCEPT',
-    dimension: 'Reaction Speed',
+    dimension: 'Processing Speed',
     color: COMPANIONS.ember.stages[0].primaryColor,
     tagline: 'Sharpen the raw speed of perception and response.',
     whatItIs:

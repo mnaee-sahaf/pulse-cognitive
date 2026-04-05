@@ -48,10 +48,10 @@ export default function WeeklyReportScreen() {
   });
 
   const dimensions = [
-    { label: 'Reaction Speed', current: report.rtScoreThisWeek, prev: report.rtScoreLastWeek, color: Colors.accent },
+    { label: 'Processing Speed', current: report.rtScoreThisWeek, prev: report.rtScoreLastWeek, color: Colors.accent },
     { label: 'Working Memory', current: report.wmScoreThisWeek, prev: report.wmScoreLastWeek, color: '#8B5CF6' },
     { label: 'Flexibility', current: report.flexScoreThisWeek, prev: report.flexScoreLastWeek, color: Colors.warning },
-    { label: 'Decision Speed', current: report.decisionScoreThisWeek, prev: report.decisionScoreLastWeek, color: Colors.success },
+    { label: 'Decision Efficiency', current: report.decisionScoreThisWeek, prev: report.decisionScoreLastWeek, color: Colors.success },
   ];
 
   // Find strongest and weakest trained dimensions
