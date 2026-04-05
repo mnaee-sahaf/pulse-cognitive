@@ -3,6 +3,16 @@ export interface RoundScoreInput {
   tapRts: number[];          // per-tap reaction times in ms
   mutationActive: boolean;
   engineIntensity: number;   // 0.0 – 1.0
+  perfectStreak: number;     // consecutive perfect rounds (0 = no streak)
+}
+
+/** Combo multiplier based on consecutive perfect rounds. */
+export function streakMultiplier(streak: number): number {
+  if (streak < 2) return 1.0;
+  if (streak < 3) return 1.2;
+  if (streak < 5) return 1.4;
+  if (streak < 8) return 1.6;
+  return 1.8; // 8+ streak
 }
 
 export function calcRoundScore(input: RoundScoreInput): number {
@@ -14,9 +24,10 @@ export function calcRoundScore(input: RoundScoreInput): number {
 
   const mutationMultiplier = input.mutationActive ? 1.5 : 1.0;
   const difficultyMultiplier = 1.0 + input.engineIntensity * 0.5;
+  const combo = streakMultiplier(input.perfectStreak);
 
   return Math.round(
-    (basePoints + speedBonus) * mutationMultiplier * difficultyMultiplier
+    (basePoints + speedBonus) * mutationMultiplier * difficultyMultiplier * combo
   );
 }
 

@@ -13,6 +13,10 @@ import {
   type PlayerProfile,
   type RoundPerformance,
 } from './adaptiveEngine';
+import { ENGINE_CONFIG_DEFAULTS, type EngineConfig } from './engineConfig';
+
+/** Each companion trains a different cognitive mode. */
+export type GameMode = 'arc' | 'tide' | 'ember';
 import { calcRoundScore, calcCognitiveScores, type CognitiveScores } from './scoring';
 
 export type GamePhase = 'idle' | 'watch' | 'recall' | 'feedback' | 'ended';
@@ -38,6 +42,7 @@ export interface TapResult {
 export interface SessionSummary {
   totalScore: number;
   roundsCompleted: number;
+  maxSequenceLength: number;
   allRts: number[];
   avgRt: number;
   bestRt: number;
@@ -46,6 +51,7 @@ export interface SessionSummary {
   mutationsSurvived: number;
   engineIntensity: number;
   cognitiveScores: CognitiveScores;
+  bestStreak: number;
 }
 
 export interface GameState {
@@ -63,12 +69,20 @@ export interface GameState {
   roundCount: number;
   summary: SessionSummary | null;
   currentFlashIndex: number;  // which cell is currently illuminated (-1 = none)
+  lives: number;              // remaining lives (session ends at 0)
+  gameMode: GameMode;
+  emberHits: number;          // Ember mode: cells intercepted in current watch sequence
+  perfectStreak: number;      // consecutive perfect rounds (no wrong taps) — resets on life loss
 }
 
-const INITIAL_FLASH_DURATION = 600; // ms
-const INITIAL_FLASH_GAP = 250;      // ms between cells
+// Flash gap is now adaptive — sourced from engine state, not a constant
 
-export function createInitialGameState(profile: PlayerProfile | null): GameState {
+export function createInitialGameState(
+  profile: PlayerProfile | null,
+  config: EngineConfig = ENGINE_CONFIG_DEFAULTS,
+  startingLives = 3,
+  gameMode: GameMode = 'arc'
+): GameState {
   return {
     phase: 'idle',
     round: null,
@@ -80,42 +94,51 @@ export function createInitialGameState(profile: PlayerProfile | null): GameState
     sessionTotal: 0,
     mutationsFaced: [],
     mutationsSurvived: 0,
-    engine: initEngine(profile),
+    engine: initEngine(profile, config),
     roundCount: 0,
     summary: null,
     currentFlashIndex: -1,
+    lives: startingLives,
+    gameMode,
+    emberHits: 0,
+    perfectStreak: 0,
   };
-}
-
-/** Computes flash duration for the current round based on tempo ramp history. */
-function calcFlashDuration(roundCount: number, tempoRamp: number): number {
-  const duration = INITIAL_FLASH_DURATION + tempoRamp * roundCount;
-  return Math.max(300, duration); // floor raised from 200ms → 300ms
 }
 
 /** Builds the next round state from engine settings. */
 export function buildRound(state: GameState): RoundState {
   const { levers } = state.engine;
-  const prevLength = state.round?.displaySequence.length ?? 2;
-  const newLength = Math.min(prevLength + levers.sequenceGrowth, levers.gridSize * levers.gridSize);
+  // Start at length 1 so round 1 adds sequenceGrowth (1) → first sequence is 2 cells.
+  // Negative sequenceGrowth shrinks the sequence (floor of 2 to stay playable).
+  const prevLength = state.round?.displaySequence.length ?? 1;
+  const rawLength = prevLength + levers.sequenceGrowth;
+  const newLength = Math.max(2, Math.min(rawLength, levers.gridSize * levers.gridSize));
 
   const displaySequence = generateSequence(newLength, levers.gridSize);
-  const mutation = selectMutation(levers, state.engine.consecutiveFailedMutations);
+
+  // Ember only uses poison (mirror/reverse apply to recall order, which Ember doesn't have)
+  const mutation = state.gameMode === 'ember'
+    ? (Math.random() < levers.mutationRate * 0.6 ? 'poison' : 'none') as Mutation
+    : selectMutation(levers, state.engine.consecutiveFailedMutations);
+
   const expectedSequence = getExpectedRecallSequence(displaySequence, mutation, levers.gridSize);
   const poisonCell = mutation === 'poison'
     ? generatePoisonCell(displaySequence, levers.gridSize)
     : null;
 
-  const flashDuration = calcFlashDuration(state.roundCount, levers.tempoRamp);
+  // Tide recalls in reverse — watch forward, recall backward
+  const finalExpectedSequence = state.gameMode === 'tide'
+    ? [...expectedSequence].reverse()
+    : expectedSequence;
 
   return {
     round: state.roundCount + 1,
     displaySequence,
-    expectedSequence,
+    expectedSequence: finalExpectedSequence,
     mutation,
     poisonCell,
-    flashDuration,
-    flashGap: INITIAL_FLASH_GAP,
+    flashDuration: state.engine.currentFlashDuration,
+    flashGap: state.engine.currentFlashGap,
     gridSize: levers.gridSize,
   };
 }
@@ -134,9 +157,8 @@ export function processTap(
     return { nextState: {}, sessionEnded: false };
   }
 
-  const rt = tapTime - (state.tapResults.length === 0 ? watchEndTime : tapTime);
-  // For simplicity: RT is time since the watch phase ended for first tap,
-  // subsequent taps measured from the previous tap
+  // RT is time since the watch phase ended for the first tap;
+  // subsequent taps measured from the previous tap's absolute time.
   const lastTapTime = state.tapResults.length > 0
     ? watchEndTime + state.sessionRts.slice(-state.tapResults.length).reduce((a, b) => a + b, 0)
     : watchEndTime;
@@ -225,11 +247,14 @@ export function completeRound(state: GameState): Partial<GameState> {
     mutationSurvived,
   };
 
+  const newPerfectStreak = state.perfectStreak + 1;
+
   const roundScore = calcRoundScore({
     sequenceLength: state.round.displaySequence.length,
     tapRts: state.tapResults.map((t) => t.rt),
     mutationActive: state.round.mutation !== 'none',
     engineIntensity: state.engine.intensity,
+    perfectStreak: newPerfectStreak,
   });
 
   const newEngine = updateEngine(state.engine, roundPerf, state.roundCount);
@@ -245,12 +270,37 @@ export function completeRound(state: GameState): Partial<GameState> {
     mutationsFaced: newMutationsFaced,
     mutationsSurvived: newMutationsSurvived,
     roundCount: state.roundCount + 1,
+    perfectStreak: newPerfectStreak,
     tapResults: [],
     recallProgress: [],
   };
 }
 
-function buildSummary(state: GameState): SessionSummary {
+/**
+ * Builds a failed RoundPerformance and updates the engine for a life-lost round.
+ * Ensures mutationSurvived === false reaches updateEngine when a mutation was active,
+ * so mutation-rate dampening and consecutiveFailedMutations tracking work correctly.
+ */
+export function applyFailedRound(state: GameState): { engine: EngineState } {
+  if (!state.round) return { engine: state.engine };
+  const roundCorrect = state.tapResults.filter((t) => t.correct).length;
+  const roundTotal = state.round.expectedSequence.length;
+  const roundAvgRt =
+    state.tapResults.length > 0
+      ? state.tapResults.reduce((s, t) => s + t.rt, 0) / state.tapResults.length
+      : 500;
+  const mutationSurvived = state.round.mutation !== 'none' ? false : null;
+
+  const roundPerf: RoundPerformance = {
+    correct: roundCorrect,
+    total: roundTotal,
+    avgRt: roundAvgRt,
+    mutationSurvived,
+  };
+  return { engine: updateEngine(state.engine, roundPerf, state.roundCount) };
+}
+
+export function buildSummary(state: GameState): SessionSummary {
   const allRts = state.sessionRts;
   const avgRt = allRts.length > 0
     ? allRts.reduce((a, b) => a + b, 0) / allRts.length
@@ -260,7 +310,7 @@ function buildSummary(state: GameState): SessionSummary {
     ? state.sessionCorrect / state.sessionTotal
     : 0;
 
-  const maxSeq = state.round?.displaySequence.length ?? 3;
+  const maxSeq = state.round?.displaySequence.length ?? 2;
   const avgRtValue = avgRt;
   const peakTempoAccuracy = accuracy;
 
@@ -275,6 +325,7 @@ function buildSummary(state: GameState): SessionSummary {
   return {
     totalScore: state.totalScore,
     roundsCompleted: state.roundCount,
+    maxSequenceLength: maxSeq,
     allRts,
     avgRt: avgRtValue,
     bestRt,
@@ -283,5 +334,6 @@ function buildSummary(state: GameState): SessionSummary {
     mutationsSurvived: state.mutationsSurvived,
     engineIntensity: state.engine.intensity,
     cognitiveScores,
+    bestStreak: state.perfectStreak,
   };
 }

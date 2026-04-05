@@ -1,14 +1,22 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 import {
   View,
   Text,
+  Pressable,
+  Alert,
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useGameStore } from '../store/gameStore';
 import { Grid } from '../components/Grid';
+import type { TileShape } from '../components/Cell';
 import { Colors, FontSize, Spacing } from '../constants/theme';
+import * as Haptics from 'expo-haptics';
+import { AnimatedBackground } from '../components/AnimatedBackground';
+import { useAppSettings } from '../store/appSettingsStore';
+import { COMPANIONS } from '../db/companion';
+import { log } from '../lib/devLog';
 
 export default function GameScreen() {
   const router = useRouter();
@@ -22,14 +30,46 @@ export default function GameScreen() {
     totalScore,
     engine,
     roundCount,
+    lives,
+    gameMode,
+    emberHits,
+    perfectStreak,
     setFlashIndex,
     startRecall,
     handleTap,
+    handleWatchTap,
+    finishEmberSequence,
     advanceRound,
+    resetSession,
   } = state;
 
+  const animatedBackground = useAppSettings((s) => s.animatedBackground);
+  const backgroundIntensity = useAppSettings((s) => s.backgroundIntensity);
+  const hapticFeedback = useAppSettings((s) => s.hapticFeedback);
   const watchEndTimeRef = useRef(0);
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flashGapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const emberFinishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevLivesRef = useRef(lives);
+  const flashStartRef = useRef(0);
+
+  // Ember: track which cell is the active intercept target and for how long.
+  // Using refs (not state) so checks in onGridTap are always current without
+  // triggering re-renders.
+  // TODO: Ember needs a full redesign — falling Tetris-style items with
+  // increasing speed/complexity that the user intercepts before they land.
+  const EMBER_GRACE_MS = 350; // ms after flash ends where tap still counts
+  const emberTargetRef = useRef(-1);        // cell index currently valid to tap
+  const emberTargetExpiryRef = useRef(0);   // absolute time when target expires
+  const emberHitThisFlashRef = useRef(false); // prevent double-counting same flash
+
+  // Buzz when a life is lost
+  useEffect(() => {
+    if (lives < prevLivesRef.current) {
+      if (hapticFeedback) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+    prevLivesRef.current = lives;
+  }, [lives, hapticFeedback]);
 
   // Watch phase: flash cells in sequence
   useEffect(() => {
@@ -39,15 +79,26 @@ export default function GameScreen() {
     const flashNext = () => {
       if (i >= round.displaySequence.length) {
         setFlashIndex(-1);
-        watchEndTimeRef.current = performance.now();
-        setTimeout(() => startRecall(watchEndTimeRef.current), round.flashGap);
+        if (gameMode === 'ember') {
+          emberFinishTimerRef.current = setTimeout(() => finishEmberSequence(), round.flashGap);
+        } else {
+          watchEndTimeRef.current = performance.now();
+          flashGapTimerRef.current = setTimeout(() => startRecall(watchEndTimeRef.current), round.flashGap);
+        }
         return;
       }
-      setFlashIndex(round.displaySequence[i]);
+      const cellIndex = round.displaySequence[i];
+      setFlashIndex(cellIndex);
+      flashStartRef.current = performance.now();
+      if (gameMode === 'ember') {
+        emberTargetRef.current = cellIndex;
+        emberTargetExpiryRef.current = performance.now() + round.flashDuration + EMBER_GRACE_MS;
+        emberHitThisFlashRef.current = false;
+      }
       i++;
       flashTimerRef.current = setTimeout(() => {
         setFlashIndex(-1);
-        setTimeout(flashNext, round.flashGap);
+        flashGapTimerRef.current = setTimeout(flashNext, round.flashGap);
       }, round.flashDuration);
     };
 
@@ -56,19 +107,25 @@ export default function GameScreen() {
     return () => {
       clearTimeout(startTimer);
       if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+      if (flashGapTimerRef.current) clearTimeout(flashGapTimerRef.current);
+      if (emberFinishTimerRef.current) clearTimeout(emberFinishTimerRef.current);
     };
   }, [phase, round?.round]);
 
-  // Feedback phase: brief green moment then advance
+  // Feedback phase: buzz on sequence complete, then advance
   useEffect(() => {
     if (phase !== 'feedback') return;
+    if (hapticFeedback) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const t = setTimeout(() => advanceRound(), 600);
     return () => clearTimeout(t);
   }, [phase]);
 
-  // Navigate to results when session ends
+  // Navigate to results when session ends (guard against double-navigation).
+  const navigatedRef = useRef(false);
   useEffect(() => {
-    if (phase === 'ended') {
+    if (phase === 'ended' && !navigatedRef.current) {
+      navigatedRef.current = true;
+      log.nav('session ended → navigating to /results', { hasSummary: !!state.summary });
       router.replace('/results');
     }
   }, [phase]);
@@ -82,37 +139,124 @@ export default function GameScreen() {
     return map;
   }, [tapResults]);
 
-  if (!round) return null;
+  const handleQuit = () => {
+    Alert.alert(
+      'Abandon Session',
+      'Your progress this session will be lost.',
+      [
+        { text: 'Keep Going', style: 'cancel' },
+        {
+          text: 'Abandon',
+          style: 'destructive',
+          onPress: () => {
+            resetSession();
+            router.replace('/');
+          },
+        },
+      ]
+    );
+  };
 
   const isRecalling = phase === 'recall';
+  const isEmberWatch = gameMode === 'ember' && phase === 'watch';
+
+  const onGridTap = useCallback((cellIndex: number, time: number) => {
+    if (isEmberWatch) {
+      const rt = time - flashStartRef.current;
+      const isValidTarget =
+        cellIndex === emberTargetRef.current &&
+        time <= emberTargetExpiryRef.current &&
+        !emberHitThisFlashRef.current;
+
+      if (isValidTarget) {
+        emberHitThisFlashRef.current = true; // lock out double-taps on same flash
+        handleWatchTap(cellIndex, rt);
+      } else if (round && cellIndex === round.poisonCell) {
+        // Route poison taps to the store regardless of timing so loseLife fires
+        handleWatchTap(cellIndex, rt);
+      }
+      // Invalid non-poison taps are silently ignored
+    } else {
+      handleTap(cellIndex, time);
+    }
+  }, [isEmberWatch, handleWatchTap, handleTap]);
+
+  if (!round) return null;
   const phaseLabel =
+    phase === 'feedback' ? 'GOOD' :
+    gameMode === 'ember' ? 'INTERCEPT' :
+    gameMode === 'tide' && phase === 'recall' ? 'REVERSE' :
     phase === 'watch' ? 'WATCH' :
-    phase === 'recall' ? 'RECALL' :
-    phase === 'feedback' ? 'GOOD' : '';
+    phase === 'recall' ? 'RECALL' : '';
+
+  // Always derived from the companion definition so color + shape stay in sync
+  const modeColor = COMPANIONS[gameMode].stages[0].primaryColor;
+
+  const tileShape: TileShape =
+    gameMode === 'arc'   ? 'hexagon' :
+    gameMode === 'tide'  ? 'circle' :
+    'square';
 
   const mutationLabel = round.mutation !== 'none' ? round.mutation.toUpperCase() : null;
 
   return (
     <SafeAreaView style={styles.safe}>
+      {animatedBackground && <AnimatedBackground intensity={backgroundIntensity} />}
       <View style={styles.container}>
         {/* HUD */}
         <View style={styles.hud}>
           <View style={styles.hudLeft}>
             <Text style={styles.score}>{totalScore.toLocaleString()}</Text>
             <Text style={styles.hudLabel}>SCORE</Text>
+            <Pressable
+              onPress={handleQuit}
+              style={({ pressed }) => [styles.quitBtn, pressed && { opacity: 0.5 }]}
+              hitSlop={12}
+            >
+              <Text style={styles.quitText}>✕ QUIT</Text>
+            </Pressable>
           </View>
           <View style={styles.hudCenter}>
+            {/* Mode badge */}
+            <View style={[styles.modeBadge, { backgroundColor: modeColor + '22', borderColor: modeColor + '55' }]}>
+              <Text style={[styles.modeText, { color: modeColor }]}>
+                {gameMode.toUpperCase()}
+              </Text>
+            </View>
+
             <Text style={[
               styles.phaseLabel,
-              phase === 'recall' && styles.phaseLabelRecall,
+              (phase === 'recall' || isEmberWatch) && { color: modeColor },
               phase === 'feedback' && styles.phaseLabelFeedback,
             ]}>
               {phaseLabel}
             </Text>
+
             {mutationLabel && (
               <View style={styles.mutationBadge}>
                 <Text style={styles.mutationText}>{mutationLabel}</Text>
               </View>
+            )}
+
+            {/* Ember: hit counter instead of recall progress */}
+            {gameMode === 'ember' && phase === 'watch' && round && (
+              <Text style={[styles.emberCounter, { color: modeColor }]}>
+                {emberHits}/{round.displaySequence.length}
+              </Text>
+            )}
+
+            <View style={styles.livesRow}>
+              {Array.from({ length: 3 }, (_, i) => (
+                <View
+                  key={i}
+                  style={[styles.lifesDot, i < lives && styles.lifesDotActive]}
+                />
+              ))}
+            </View>
+            {perfectStreak >= 2 && (
+              <Text style={[styles.streakBadge, { color: modeColor }]}>
+                {perfectStreak}x STREAK
+              </Text>
             )}
           </View>
           <View style={styles.hudRight}>
@@ -141,8 +285,11 @@ export default function GameScreen() {
             illuminatedCell={currentFlashIndex}
             poisonCell={round.poisonCell}
             tapStates={tapStates()}
-            onTap={handleTap}
-            disabled={!isRecalling}
+            onTap={onGridTap}
+            disabled={!isRecalling && !isEmberWatch}
+            themeColor={modeColor}
+            tileShape={tileShape}
+            hideWhenIdle={gameMode === 'ember'}
           />
         </View>
 
@@ -182,7 +329,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
   },
-  hudLeft: { alignItems: 'flex-start', minWidth: 64 },
+  hudLeft: { alignItems: 'flex-start', minWidth: 64, gap: 2 },
   hudCenter: { alignItems: 'center', gap: 6 },
   hudRight: { alignItems: 'flex-end', minWidth: 64 },
   score: {
@@ -205,6 +352,27 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     textTransform: 'uppercase',
   },
+  quitBtn: {
+    marginTop: 6,
+  },
+  quitText: {
+    fontSize: FontSize.label,
+    fontWeight: '600',
+    color: Colors.textTertiary,
+    letterSpacing: 1,
+  },
+  modeBadge: {
+    borderRadius: 6,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginBottom: 2,
+  },
+  modeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 2,
+  },
   phaseLabel: {
     fontSize: 13,
     fontWeight: '600',
@@ -212,11 +380,14 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     textTransform: 'uppercase',
   },
-  phaseLabelRecall: {
-    color: Colors.accent,
-  },
   phaseLabelFeedback: {
     color: Colors.success,
+  },
+  emberCounter: {
+    fontSize: 18,
+    fontWeight: '700',
+    fontFamily: 'serif',
+    letterSpacing: -0.5,
   },
   mutationBadge: {
     backgroundColor: Colors.warning + '22',
@@ -231,6 +402,29 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.warning,
     letterSpacing: 1.5,
+  },
+  livesRow: {
+    flexDirection: 'row',
+    gap: 5,
+    marginTop: 4,
+  },
+  lifesDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: Colors.border,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  lifesDotActive: {
+    backgroundColor: Colors.danger,
+    borderColor: Colors.danger,
+  },
+  streakBadge: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginTop: 2,
   },
   seqRow: {
     flexDirection: 'row',

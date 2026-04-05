@@ -31,6 +31,8 @@ The companion system (Pokémon-inspired) gives players a persistent creature tha
 
 Full product spec lives in `specs.md`. Adaptive engine explained in `docs/adaptive-engine.md`.
 
+**Spec / doc / code drift:** see `docs/KNOWN_INCONSISTENCIES.md` for a maintained list of mismatches (including data-model issues such as `engine_lever_log`).
+
 ---
 
 ## 2. Tech Stack & Key Decisions
@@ -79,26 +81,36 @@ pulse-cognitive/
 │   ├── countdown.tsx             # 3-2-1 pre-session transition
 │   ├── game.tsx                  # Core gameplay screen
 │   ├── results.tsx               # Post-session results + XP award
-│   └── history.tsx               # Session history + RT trend chart
+│   ├── history.tsx               # Session history + RT trend chart
+│   └── settings.tsx              # App settings (lives, haptics, background, etc.)
 │
 ├── engine/                       # Pure TypeScript game logic (no React)
 │   ├── sequenceGenerator.ts      # Grid sequences, mutation transforms
 │   ├── adaptiveEngine.ts         # 4-lever rule-based difficulty engine
+│   ├── engineConfig.ts           # EngineConfig interface + tunable defaults
 │   ├── gameStateMachine.ts       # Session state machine + RT measurement
 │   └── scoring.ts                # Round score formula + cognitive scores
 │
 ├── store/
-│   └── gameStore.ts              # Zustand store — bridges engine to UI
+│   ├── gameStore.ts              # Zustand store — bridges engine to UI
+│   └── appSettingsStore.ts       # Zustand store — app settings (synced from DB)
 │
 ├── components/
 │   ├── Cell.tsx                  # Grid cell with Reanimated 4 animations
 │   ├── Grid.tsx                  # Renders NxN grid, computes cell sizes
-│   └── Companion.tsx             # Companion shape + idle/celebrate animations
+│   ├── Companion.tsx             # Companion shape + idle/celebrate animations
+│   ├── AnimatedBackground.tsx    # Optional animated background effect
+│   ├── FallingItemsGrid.tsx      # Ember mode falling-item visual (WIP)
+│   └── LevelUpModal.tsx          # Level-up / evolution overlay
+│
+├── hooks/                        # Shared React hooks
 │
 ├── db/
 │   ├── database.ts               # SQLite init + migration runner
 │   ├── sessions.ts               # Session CRUD + lifetime stats queries
 │   ├── playerProfile.ts          # Player profile load/update
+│   ├── engineConfig.ts           # Per-session engine config persistence
+│   ├── appSettings.ts            # App settings CRUD
 │   ├── companion.ts              # Companion definitions, XP/level logic, CRUD
 │   └── export.ts                 # CSV export → native share sheet
 │
@@ -107,7 +119,8 @@ pulse-cognitive/
 │
 ├── docs/
 │   ├── architecture.md           # This file
-│   └── adaptive-engine.md        # Plain-english engine explanation
+│   ├── adaptive-engine.md        # Plain-english engine explanation
+│   └── KNOWN_INCONSISTENCIES.md  # Tracked spec/doc/code divergences
 │
 ├── specs.md                      # Full product specification (v2.0)
 ├── app.json                      # Expo config (bundle ID, plugins, new arch)
@@ -146,7 +159,7 @@ gameStore.ts
   processTap() ──► engine/gameStateMachine.ts
         │
   correct? ──► advance to next tap
-  wrong?   ──► phase = 'ended' → navigate to results
+  wrong?   ──► lives > 1? loseLife() → rebuild round; else phase = 'ended'
   round complete? ──► phase = 'feedback'
         │
         ▼ (on feedback)
@@ -172,10 +185,10 @@ After each round:
         │
         ▼
   Decision tree (4 branches):
-    accuracy > 90% + RT < 350ms  → push all axes
-    accuracy > 90% + RT > 450ms  → push tempo only
-    accuracy 70-90% + RT < 400ms → hold (ZPD)
-    accuracy < 70%               → ease back
+    accuracy > 90% + RT < 350ms  → push all axes (accelTempoRamp, accelGrowth)
+    accuracy > 90% + RT > 450ms  → push tempo only (pushTempoRamp)
+    accuracy 80-90%              → hold (ZPD): sequenceGrowth=0, tempoRamp=0
+    accuracy < 80%               → ease back (easeTempoRamp positive, reduces mutations)
         │
         ▼
   Updated LeverSettings → next buildRound()
@@ -189,7 +202,8 @@ After each round:
 Pure TypeScript. Zero React imports. Zero side effects. All functions are deterministic given the same inputs.
 
 - **sequenceGenerator.ts** — stateless functions. Given a length and grid size, returns a randomized sequence. Handles mutation transforms (mirror, reverse, poison cell selection).
-- **adaptiveEngine.ts** — stateless update function. Takes current `EngineState` + `RoundPerformance` → returns new `EngineState`. The levers are the only output.
+- **adaptiveEngine.ts** — pure update function. Takes current `EngineState` + `RoundPerformance` → returns new `EngineState`. Output includes updated `levers`, accumulated `currentFlashDuration`, and a `leverHistory` snapshot array (one entry per completed round). No React or SQLite imports.
+- **engineConfig.ts** — `EngineConfig` interface and `ENGINE_CONFIG_DEFAULTS`. All tuning knobs (thresholds, ramps, grid timing) live here. A config snapshot is frozen into `EngineState` at session start.
 - **gameStateMachine.ts** — stateful session structure. Manages the `GameState` object through phases. `processTap()` and `completeRound()` are pure functions that return partial state updates (no mutations).
 - **scoring.ts** — pure math functions. Round score formula and 0-100 cognitive dimension scores.
 
@@ -493,6 +507,6 @@ node node_modules/typescript/lib/tsc.js --noEmit
 
 **RT measurement precision.** `performance.now()` gives ~1-4ms jitter on JS thread. Good enough for consumer use. Native modules (Phase 4) will be needed for clinical-grade sub-millisecond precision.
 
-**`engine_lever_log` in sessions table.** This is the most important field for future ML training. It stores per-round lever settings as a JSON array. Never remove it or change its format without a migration plan.
+**`engine_lever_log` in sessions table.** This is the most important field for future ML training. It stores per-round lever settings as a JSON array — one `LeverSettings` entry per completed round, snapshotted at the start of that round via `EngineState.leverHistory`. Never remove it or change its format without a migration plan.
 
 **Single-row tables.** Both `player_profile` and `companion` use `id = 1` as a constraint. This is intentional — there is always exactly one player profile and one companion. Use `ON CONFLICT(id) DO UPDATE` for upserts.

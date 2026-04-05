@@ -17,21 +17,73 @@ import Animated, {
 import { useRouter } from 'expo-router';
 import { useGameStore } from '../store/gameStore';
 import { Colors, FontSize, Spacing } from '../constants/theme';
+import { AnimatedBackground } from '../components/AnimatedBackground';
+import { useAppSettings } from '../store/appSettingsStore';
 import { saveSession, getProfileSeedData } from '../db/sessions';
 import { updatePlayerProfile } from '../db/playerProfile';
 import { awardXp, loadCompanion, scoreToXp, type CompanionState } from '../db/companion';
+import { loadPurchaseState, type PurchaseState } from '../db/purchaseState';
+import { recordSessionForStreak, getStreakMilestone, getStreakLabel, type StreakState } from '../db/streaks';
+import { getLifetimeStats } from '../db/sessions';
 import { Companion } from '../components/Companion';
 import { LevelUpModal } from '../components/LevelUpModal';
+import { UpgradePrompt } from '../components/UpgradePrompt';
+import { ShareableSnapshot } from '../components/ShareableSnapshot';
+import type { GameMode } from '../engine/gameStateMachine';
+
+// Which cognitive dimensions each mode actively trains
+const MODE_ACTIVE_DIMS: Record<GameMode, Set<string>> = {
+  arc: new Set(['Working Memory', 'Decision Speed']),
+  tide: new Set(['Flexibility', 'Decision Speed']),
+  ember: new Set(['Reaction Speed', 'Decision Speed']),
+};
+
+function buildNudge(
+  sessionCount: number,
+  streak: StreakState,
+  companionLevel: number
+): string | null {
+  // Milestone nudges (highest priority first)
+  const milestone = getStreakMilestone(streak.currentStreak);
+  if (milestone === 7) {
+    return '7 days straight — you\'re serious about this. Unlock full training for $7.99.';
+  }
+  if (companionLevel === 10) {
+    return 'Your companion reached Level 10! The other companions are waiting.';
+  }
+  // Session-count nudges
+  if (sessionCount === 3) {
+    return 'Your brain is warming up. Unlock all 3 training modes to build a complete profile.';
+  }
+  if (sessionCount === 5) {
+    return 'You\'ve completed 5 sessions! Complete cognitive training requires all 3 modes.';
+  }
+  if (sessionCount === 10) {
+    return '10 sessions in — you\'re committed. Train the whole brain for $7.99.';
+  }
+  // Every 10th session after that
+  if (sessionCount > 10 && sessionCount % 10 === 0) {
+    return `${sessionCount} sessions and counting. Unlock everything for just $7.99.`;
+  }
+  return null;
+}
 
 export default function ResultsScreen() {
   const router = useRouter();
-  const { summary, engine, resetSession } = useGameStore();
+  const { summary, engine, resetSession, gameMode } = useGameStore();
+  const animatedBackground = useAppSettings((s) => s.animatedBackground);
+  const backgroundIntensity = useAppSettings((s) => s.backgroundIntensity);
   const savedRef = useRef(false);
   const [companion, setCompanion] = useState<CompanionState | null>(null);
+  const [purchaseState, setPurchaseState] = useState<PurchaseState | null>(null);
+  const [upgradeVisible, setUpgradeVisible] = useState(false);
   const [xpGained, setXpGained] = useState(0);
   const [leveledUp, setLeveledUp] = useState(false);
   const [evolved, setEvolved] = useState(false);
   const [showLevelUpModal, setShowLevelUpModal] = useState(false);
+  const [streak, setStreak] = useState<StreakState | null>(null);
+  const [nudgeText, setNudgeText] = useState<string | null>(null);
+  const [sessionCount, setSessionCount] = useState(0);
 
   // Persist session and award XP once on mount
   useEffect(() => {
@@ -39,9 +91,9 @@ export default function ResultsScreen() {
     savedRef.current = true;
 
     const persist = async () => {
-      await saveSession(summary, engine.roundHistory.map(() => engine.levers));
+      await saveSession(summary, engine.leverHistory);
       const seed = await getProfileSeedData(10);
-      await updatePlayerProfile(seed.avgRts, seed.maxSequenceLengths, seed.flexRatings);
+      await updatePlayerProfile(seed.avgRts, seed.maxSequenceLengths, seed.flexRatings, seed.accuracies);
 
       const result = await awardXp(summary.totalScore);
       setCompanion(result.state);
@@ -49,26 +101,51 @@ export default function ResultsScreen() {
       setLeveledUp(result.leveledUp);
       setEvolved(result.evolved);
       if (result.leveledUp) setShowLevelUpModal(true);
+
+      const ps = await loadPurchaseState();
+      setPurchaseState(ps);
+
+      // Record streak
+      const streakResult = await recordSessionForStreak();
+      setStreak(streakResult);
+
+      // Get session count for nudge triggers
+      const stats = await getLifetimeStats();
+      setSessionCount(stats.sessionCount);
+
+      // Build contextual nudge (only for free users)
+      if (ps && !ps.fullUnlock) {
+        const nudge = buildNudge(stats.sessionCount, streakResult, result.state.level);
+        setNudgeText(nudge);
+      }
     };
     persist().catch(console.error);
   }, []);
 
+  // Summary may be null briefly while the store update propagates after navigation.
+  // Show nothing for one frame rather than redirecting to home immediately.
   if (!summary) {
-    router.replace('/');
-    return null;
+    return <View style={styles.safe} />;
   }
 
   const { cognitiveScores, totalScore, roundsCompleted, avgRt, bestRt, accuracy } = summary;
+
+  const activeDims = MODE_ACTIVE_DIMS[gameMode] ?? MODE_ACTIVE_DIMS.arc;
+  const isFullUnlock = purchaseState?.fullUnlock ?? false;
 
   const metrics = [
     { label: 'Reaction Speed', score: cognitiveScores.rtScore, color: Colors.accent },
     { label: 'Working Memory', score: cognitiveScores.wmScore, color: '#8B5CF6' },
     { label: 'Flexibility', score: cognitiveScores.flexScore, color: Colors.warning },
     { label: 'Decision Speed', score: cognitiveScores.decisionScore, color: Colors.success },
-  ];
+  ].map((m) => ({
+    ...m,
+    locked: !isFullUnlock && !activeDims.has(m.label),
+  }));
 
   return (
     <SafeAreaView style={styles.safe}>
+      {animatedBackground && <AnimatedBackground intensity={backgroundIntensity} />}
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
@@ -92,8 +169,26 @@ export default function ResultsScreen() {
         <View style={styles.profileSection}>
           <Text style={styles.sectionLabel}>COGNITIVE PROFILE</Text>
           {metrics.map((m, i) => (
-            <MetricBar key={m.label} {...m} delay={i * 100} />
+            <MetricBar
+              key={m.label}
+              label={m.label}
+              score={m.score}
+              color={m.color}
+              delay={i * 100}
+              locked={m.locked}
+              onLockedTap={() => setUpgradeVisible(true)}
+            />
           ))}
+          {metrics.some((m) => m.locked) && (
+            <Pressable
+              onPress={() => setUpgradeVisible(true)}
+              style={({ pressed }) => [styles.profileNudge, pressed && { opacity: 0.7 }]}
+            >
+              <Text style={styles.profileNudgeText}>
+                Unlock all training modes to build a complete profile
+              </Text>
+            </Pressable>
+          )}
         </View>
 
         {/* Engine report */}
@@ -115,6 +210,27 @@ export default function ResultsScreen() {
           </View>
         </View>
 
+        {/* Streak */}
+        {streak && streak.currentStreak > 0 && (
+          <View style={styles.streakCard}>
+            <Text style={styles.streakIcon}>{streak.currentStreak >= 7 ? '\uD83D\uDD25' : '\u26A1'}</Text>
+            <Text style={styles.streakText}>
+              {streak.currentStreak} day streak
+              {getStreakLabel(streak.currentStreak) ? ` \u2014 ${getStreakLabel(streak.currentStreak)}` : ''}
+            </Text>
+          </View>
+        )}
+
+        {/* Upgrade nudge */}
+        {nudgeText && (
+          <Pressable
+            style={({ pressed }) => [styles.nudgeCard, pressed && { opacity: 0.8 }]}
+            onPress={() => setUpgradeVisible(true)}
+          >
+            <Text style={styles.nudgeText}>{nudgeText}</Text>
+          </Pressable>
+        )}
+
         {/* Companion XP */}
         {companion && (
           <View style={styles.companionCard}>
@@ -134,6 +250,17 @@ export default function ResultsScreen() {
             )}
           </View>
         )}
+
+        {/* Shareable snapshot */}
+        <ShareableSnapshot
+          totalScore={totalScore}
+          roundsCompleted={roundsCompleted}
+          accuracy={accuracy}
+          avgRt={avgRt}
+          cognitiveScores={cognitiveScores}
+          engineIntensity={summary.engineIntensity}
+          streak={streak?.currentStreak}
+        />
 
         {/* CTAs */}
         <View style={styles.ctaGroup}>
@@ -163,6 +290,18 @@ export default function ResultsScreen() {
           onDismiss={() => setShowLevelUpModal(false)}
         />
       )}
+
+      {purchaseState && (
+        <UpgradePrompt
+          visible={upgradeVisible}
+          freeCompanionId={purchaseState.freeCompanionId}
+          onPurchase={() => {
+            // TODO: wire up IAP
+            setUpgradeVisible(false);
+          }}
+          onDismiss={() => setUpgradeVisible(false)}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -181,40 +320,63 @@ function MetricBar({
   score,
   color,
   delay,
+  locked = false,
+  onLockedTap,
 }: {
   label: string;
   score: number;
   color: string;
   delay: number;
+  locked?: boolean;
+  onLockedTap?: () => void;
 }) {
   const width = useSharedValue(0);
 
   useEffect(() => {
-    width.value = withDelay(
-      delay,
-      withTiming(score, {
-        duration: 800,
-        easing: Easing.bezier(0.22, 1, 0.36, 1),
-      })
-    );
-  }, []);
+    if (!locked) {
+      width.value = withDelay(
+        delay,
+        withTiming(score, {
+          duration: 800,
+          easing: Easing.bezier(0.22, 1, 0.36, 1),
+        })
+      );
+    }
+  }, [locked]);
 
   const barStyle = useAnimatedStyle(() => ({
     width: `${width.value}%`,
-    backgroundColor: color,
+    backgroundColor: locked ? Colors.border : color,
   }));
 
-  return (
-    <View style={styles.metricRow}>
+  const content = (
+    <View style={[styles.metricRow, locked && { opacity: 0.5 }]}>
       <View style={styles.metricLabelRow}>
-        <Text style={styles.metricName}>{label}</Text>
-        <Text style={[styles.metricScore, { color }]}>{score}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          {locked && <Text style={{ fontSize: 11 }}>{'\uD83D\uDD12'}</Text>}
+          <Text style={styles.metricName}>{label}</Text>
+        </View>
+        {locked ? (
+          <Text style={[styles.metricScore, { color: Colors.textTertiary, fontSize: 11 }]}>LOCKED</Text>
+        ) : (
+          <Text style={[styles.metricScore, { color }]}>{score}</Text>
+        )}
       </View>
       <View style={styles.barTrack}>
         <Animated.View style={[styles.barFill, barStyle]} />
       </View>
     </View>
   );
+
+  if (locked && onLockedTap) {
+    return (
+      <Pressable onPress={onLockedTap}>
+        {content}
+      </Pressable>
+    );
+  }
+
+  return content;
 }
 
 const styles = StyleSheet.create({
@@ -306,6 +468,17 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 2,
   },
+  profileNudge: {
+    marginTop: 4,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  profileNudgeText: {
+    fontSize: 12,
+    color: Colors.accent,
+    fontWeight: '500',
+    letterSpacing: 0.3,
+  },
   engineCard: {
     backgroundColor: Colors.surface,
     borderRadius: Spacing.cardRadius,
@@ -328,6 +501,39 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.textPrimary,
     fontFamily: 'serif',
+  },
+  streakCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: Colors.warning + '44',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    alignSelf: 'stretch',
+  },
+  streakIcon: { fontSize: 18 },
+  streakText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  nudgeCard: {
+    backgroundColor: Colors.accentSoft,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.accent + '33',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    alignSelf: 'stretch',
+  },
+  nudgeText: {
+    fontSize: 13,
+    color: Colors.accent,
+    lineHeight: 18,
+    textAlign: 'center',
   },
   ctaGroup: { gap: 12 },
   companionCard: {
