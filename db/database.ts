@@ -49,6 +49,7 @@ export async function resetAllData(): Promise<void> {
     DELETE FROM engine_config;
     DELETE FROM app_settings;
     DELETE FROM purchase_state;
+    DELETE FROM streak_state;
   `);
 }
 
@@ -161,6 +162,14 @@ async function migrate(db: SQLite.SQLiteDatabase) {
       id INTEGER PRIMARY KEY CHECK (id = 1),
       free_companion_id TEXT NOT NULL DEFAULT 'arc',
       full_unlock INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS streak_state (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      current_streak INTEGER NOT NULL DEFAULT 0,
+      best_streak INTEGER NOT NULL DEFAULT 0,
+      last_session_date TEXT,
+      frozen INTEGER NOT NULL DEFAULT 0
     );
   `);
 }
