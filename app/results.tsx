@@ -22,21 +22,10 @@ import { useAppSettings } from '../store/appSettingsStore';
 import { saveSession, getProfileSeedData } from '../db/sessions';
 import { updatePlayerProfile } from '../db/playerProfile';
 import { awardXp, loadCompanion, scoreToXp, type CompanionState } from '../db/companion';
-import { loadPurchaseState } from '../db/purchaseState';
 import { recordSessionForStreak, getStreakLabel, type StreakState } from '../db/streaks';
 import { Companion } from '../components/Companion';
 import { LevelUpModal } from '../components/LevelUpModal';
 import { ShareableSnapshot } from '../components/ShareableSnapshot';
-import type { GameMode } from '../engine/gameStateMachine';
-
-// Which cognitive dimensions each mode actively trains
-const MODE_ACTIVE_DIMS: Record<GameMode, Set<string>> = {
-  arc: new Set(['Working Memory', 'Decision Efficiency']),
-  tide: new Set(['Flexibility', 'Decision Efficiency']),
-  ember: new Set(['Processing Speed', 'Decision Efficiency']),
-  halt: new Set(['Impulse Control', 'Decision Efficiency']),
-};
-
 export default function ResultsScreen() {
   const router = useRouter();
   const { summary, engine, resetSession, gameMode } = useGameStore();
@@ -67,8 +56,6 @@ export default function ResultsScreen() {
       setEvolved(result.evolved);
       if (result.leveledUp) setShowLevelUpModal(true);
 
-      await loadPurchaseState();
-
       // Record streak
       const streakResult = await recordSessionForStreak();
       setStreak(streakResult);
@@ -85,19 +72,17 @@ export default function ResultsScreen() {
 
   const { cognitiveScores, totalScore, roundsCompleted, avgRt, bestRt, accuracy } = summary;
 
-  const activeDims = MODE_ACTIVE_DIMS[gameMode] ?? MODE_ACTIVE_DIMS.arc;
-  const isFullUnlock = true; // v1: all modes unlocked
-
   const metrics = [
     { label: 'Processing Speed', score: cognitiveScores.rtScore, color: Colors.accent },
     { label: 'Working Memory', score: cognitiveScores.wmScore, color: '#8B5CF6' },
     { label: 'Flexibility', score: cognitiveScores.flexScore, color: Colors.warning },
     { label: 'Decision Efficiency', score: cognitiveScores.decisionScore, color: Colors.success },
     { label: 'Impulse Control', score: cognitiveScores.impulseScore, color: '#10B981' },
-  ].map((m) => ({
-    ...m,
-    locked: !isFullUnlock && !activeDims.has(m.label),
-  }));
+  ];
+
+  const sorted = [...metrics].sort((a, b) => a.score - b.score);
+  const weakest = sorted.filter((m) => m.score < 60).slice(0, 2);
+  const strongest = sorted.filter((m) => m.score >= 70).sort((a, b) => b.score - a.score).slice(0, 1);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -131,11 +116,25 @@ export default function ResultsScreen() {
               score={m.score}
               color={m.color}
               delay={i * 100}
-              locked={m.locked}
-              onLockedTap={() => setUpgradeVisible(true)}
             />
           ))}
         </View>
+
+        {/* Focus areas callout */}
+        {(weakest.length > 0 || strongest.length > 0) && (
+          <View style={styles.focusCard}>
+            {strongest.length > 0 && (
+              <Text style={styles.focusStrong}>
+                Strongest: {strongest.map((m) => m.label).join(', ')}
+              </Text>
+            )}
+            {weakest.length > 0 && (
+              <Text style={styles.focusWeak}>
+                Focus next: {weakest.map((m) => m.label).join(', ')}
+              </Text>
+            )}
+          </View>
+        )}
 
         {/* Engine report */}
         <View style={styles.engineCard}>
@@ -241,68 +240,56 @@ function StatBlock({ label, value }: { label: string; value: string }) {
   );
 }
 
+function getBenchmarkLabel(score: number): string {
+  if (score >= 85) return 'Elite';
+  if (score >= 70) return 'Advanced';
+  if (score >= 50) return 'Intermediate';
+  if (score >= 30) return 'Developing';
+  return 'Beginner';
+}
+
 function MetricBar({
   label,
   score,
   color,
   delay,
-  locked = false,
-  onLockedTap,
 }: {
   label: string;
   score: number;
   color: string;
   delay: number;
-  locked?: boolean;
-  onLockedTap?: () => void;
 }) {
   const width = useSharedValue(0);
 
   useEffect(() => {
-    if (!locked) {
-      width.value = withDelay(
-        delay,
-        withTiming(score, {
-          duration: 800,
-          easing: Easing.bezier(0.22, 1, 0.36, 1),
-        })
-      );
-    }
-  }, [locked]);
+    width.value = withDelay(
+      delay,
+      withTiming(score, {
+        duration: 800,
+        easing: Easing.bezier(0.22, 1, 0.36, 1),
+      })
+    );
+  }, []);
 
   const barStyle = useAnimatedStyle(() => ({
     width: `${width.value}%`,
-    backgroundColor: locked ? Colors.border : color,
+    backgroundColor: color,
   }));
 
-  const content = (
-    <View style={[styles.metricRow, locked && { opacity: 0.5 }]}>
+  return (
+    <View style={styles.metricRow}>
       <View style={styles.metricLabelRow}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          {locked && <Text style={{ fontSize: 11 }}>{'\uD83D\uDD12'}</Text>}
-          <Text style={styles.metricName}>{label}</Text>
-        </View>
-        {locked ? (
-          <Text style={[styles.metricScore, { color: Colors.textTertiary, fontSize: 11 }]}>LOCKED</Text>
-        ) : (
+        <Text style={styles.metricName}>{label}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+          <Text style={styles.benchmarkLabel}>{getBenchmarkLabel(score)}</Text>
           <Text style={[styles.metricScore, { color }]}>{score}</Text>
-        )}
+        </View>
       </View>
       <View style={styles.barTrack}>
         <Animated.View style={[styles.barFill, barStyle]} />
       </View>
     </View>
   );
-
-  if (locked && onLockedTap) {
-    return (
-      <Pressable onPress={onLockedTap}>
-        {content}
-      </Pressable>
-    );
-  }
-
-  return content;
 }
 
 const styles = StyleSheet.create({
@@ -394,15 +381,31 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 2,
   },
-  profileNudge: {
-    marginTop: 4,
-    paddingVertical: 8,
-    alignItems: 'center',
+  benchmarkLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: Colors.textTertiary,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
   },
-  profileNudgeText: {
-    fontSize: 12,
-    color: Colors.accent,
-    fontWeight: '500',
+  focusCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: Spacing.cardRadius,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    padding: 16,
+    gap: 6,
+  },
+  focusStrong: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.success,
+    letterSpacing: 0.3,
+  },
+  focusWeak: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.warning,
     letterSpacing: 0.3,
   },
   engineCard: {
@@ -445,21 +448,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: Colors.textPrimary,
-  },
-  nudgeCard: {
-    backgroundColor: Colors.accentSoft,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.accent + '33',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    alignSelf: 'stretch',
-  },
-  nudgeText: {
-    fontSize: 13,
-    color: Colors.accent,
-    lineHeight: 18,
-    textAlign: 'center',
   },
   ctaGroup: { gap: 12 },
   companionCard: {
