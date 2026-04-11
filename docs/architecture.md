@@ -18,8 +18,9 @@
 8. [Design System](#8-design-system)
 9. [Companion System](#9-companion-system)
 10. [Development Setup](#10-development-setup)
-11. [What's Built vs What's Planned](#11-whats-built-vs-whats-planned)
-12. [Known Constraints & Gotchas](#12-known-constraints--gotchas)
+11. [Testing](#11-testing)
+12. [What's Built vs What's Planned](#12-whats-built-vs-whats-planned)
+13. [Known Constraints & Gotchas](#13-known-constraints--gotchas)
 
 ---
 
@@ -85,8 +86,10 @@ pulse-cognitive/
 │   └── settings.tsx              # App settings (lives, haptics, background, etc.)
 │
 ├── engine/                       # Pure TypeScript game logic (no React)
+│   ├── __tests__/                # Jest unit tests (129 tests)
 │   ├── sequenceGenerator.ts      # Grid sequences, mutation transforms
 │   ├── adaptiveEngine.ts         # 4-lever rule-based difficulty engine
+│   ├── boosterEngine.ts          # Training phases + booster session logic
 │   ├── engineConfig.ts           # EngineConfig interface + tunable defaults
 │   ├── gameStateMachine.ts       # Session state machine + RT measurement
 │   └── scoring.ts                # Round score formula + cognitive scores
@@ -124,6 +127,7 @@ pulse-cognitive/
 │
 ├── specs.md                      # Full product specification (v2.0)
 ├── app.json                      # Expo config (bundle ID, plugins, new arch)
+├── .github/workflows/test.yml    # CI: runs tests on push/PR to main
 ├── babel.config.js               # babel-preset-expo only (no reanimated plugin needed)
 └── package.json
 ```
@@ -455,7 +459,86 @@ node node_modules/typescript/lib/tsc.js --noEmit
 
 ---
 
-## 11. What's Built vs What's Planned
+## 11. Testing
+
+### Runner & Toolchain
+
+Tests use **Jest** with **ts-jest** for TypeScript transformation. The engine layer is pure TypeScript with no React or native dependencies, so tests run in Node without the Expo runtime.
+
+| Tool | Purpose |
+|---|---|
+| `jest` | Test runner |
+| `ts-jest` | Transforms `.ts` files for Jest (bypasses Expo/Babel pipeline) |
+| `@types/jest` | TypeScript definitions for `expect`, `describe`, `it`, etc. |
+
+### Running Tests
+
+```bash
+# Run all tests
+npm test
+
+# Run with coverage report
+npm run test:ci
+
+# Run a single suite
+npx jest scoring
+```
+
+### Test Structure
+
+Tests live alongside the code they cover in `engine/__tests__/`:
+
+```
+engine/
+├── __tests__/
+│   ├── scoring.test.ts            # 25 tests
+│   ├── sequenceGenerator.test.ts  # 18 tests
+│   ├── boosterEngine.test.ts      # 15 tests
+│   ├── adaptiveEngine.test.ts     # 30 tests
+│   └── gameStateMachine.test.ts   # 41 tests
+├── scoring.ts
+├── sequenceGenerator.ts
+├── boosterEngine.ts
+├── adaptiveEngine.ts
+├── gameStateMachine.ts
+└── engineConfig.ts
+```
+
+### What's Covered
+
+All tests target the **engine layer** — pure functions with deterministic inputs and outputs. No mocking of DB, network, or React.
+
+| Suite | What's tested |
+|---|---|
+| `scoring` | Streak multiplier tiers, round score with all multiplier combos (mutation, intensity, streak), RT distribution stats (mean, SD, CV, skewness/IIV), Pulse Index weighted composite, cognitive score derivation for all 5 dimensions including HALT impulse metrics |
+| `sequenceGenerator` | Sequence length/bounds/uniqueness, poison cell exclusion, mirror transform (including double-mirror roundtrip), all 6 mutation recall mappings (reverse, parity, double, mirror, colorSwitch, poison), index↔position conversion |
+| `boosterEngine` | Training phase boundaries (foundation/sharpen/maintain), booster type selection with priority chain (reactivation > challenge > maintenance), frequency cap messaging per Lampit et al., difficulty scaling factors |
+| `adaptiveEngine` | Profile-seeded initialization (tempo, growth, mutation rate from baseline RT/WM/flex), warmup calibration on round 1, all post-warmup branches (accel-all, push-tempo, steady-push, zpd-hold, overwhelm, recovery), grid expansion 3→4, flash duration clamping to floor/ceiling, mutation streak tracking, intensity score bounds |
+| `gameStateMachine` | Initial state creation for all 4 game modes, round building (standard + HALT single-trial + TIDE reverse), tap processing (correct/wrong/poison with session-end logic), HALT tap/timeout handling with SSD staircase, round completion with scoring + engine update, failed round engine feedback, session summary with HALT metrics (SSRT, d'), ARC binding question scoring |
+
+### CI Workflow
+
+GitHub Actions runs tests on every push to `main` and every PR targeting `main`:
+
+- **File:** `.github/workflows/test.yml`
+- **Environment:** Ubuntu, Node 20
+- **Steps:** `npm ci` → `npm run test:ci` (with `--ci --coverage`)
+- **Artifacts:** Coverage report uploaded and retained for 7 days
+
+### Writing New Tests
+
+When adding a new engine function:
+
+1. Add a `describe` block in the corresponding `__tests__/*.test.ts` file
+2. Test edge cases (empty inputs, boundary values, clamping)
+3. For functions with randomness (`Math.random()`), use `jest.spyOn(Math, 'random').mockReturnValue(...)` to make tests deterministic
+4. Run `npm test` before committing
+
+**Rule:** Engine tests must never import from React, Zustand, or SQLite. If a function needs those, it belongs in a different test layer (integration tests, planned for Phase 2).
+
+---
+
+## 12. What's Built vs What's Planned
 
 ### Built (Phase 1)
 
@@ -491,7 +574,7 @@ node node_modules/typescript/lib/tsc.js --noEmit
 
 ---
 
-## 12. Known Constraints & Gotchas
+## 13. Known Constraints & Gotchas
 
 **Reanimated 4 + Expo Go = broken.** Always use `npx expo run:ios --device` or the simulator. Do not test in Expo Go.
 
