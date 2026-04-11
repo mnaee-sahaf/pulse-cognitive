@@ -287,9 +287,9 @@ export default function SettingsScreen() {
             <Pressable onPress={() => router.back()} style={styles.backBtn}>
               <Text style={styles.backText}>← Back</Text>
             </Pressable>
-            <Text style={styles.title}>Engine Settings</Text>
+            <Text style={styles.title}>Settings</Text>
             <Text style={styles.subtitle}>
-              Changes apply on the next session start. Save your preset, then share the JSON to log it back.
+              Customize your training experience.
             </Text>
           </View>
 
@@ -365,8 +365,8 @@ export default function SettingsScreen() {
             </View>
           </View>
 
-          {/* Engine Sections */}
-          {SECTIONS.map((section) => (
+          {/* Engine Sections — dev only */}
+          {__DEV__ && SECTIONS.map((section) => (
             <View key={section.title} style={styles.section}>
               <Text style={styles.sectionTitle}>{section.title.toUpperCase()}</Text>
               <View style={styles.card}>
@@ -401,34 +401,36 @@ export default function SettingsScreen() {
             </View>
           ))}
 
-          {/* Actions */}
-          <View style={styles.actions}>
-            <Pressable
-              style={({ pressed }) => [styles.btnPrimary, pressed && styles.pressed]}
-              onPress={handleSave}
-            >
-              <Text style={styles.btnPrimaryText}>
-                {saved ? 'Saved ✓' : 'Save Preset'}
-              </Text>
-            </Pressable>
-
-            <View style={styles.rowBtns}>
+          {/* Engine actions — dev only */}
+          {__DEV__ && (
+            <View style={styles.actions}>
               <Pressable
-                style={({ pressed }) => [styles.btnSecondary, { flex: 1 }, pressed && styles.pressed]}
-                onPress={handleShare}
+                style={({ pressed }) => [styles.btnPrimary, pressed && styles.pressed]}
+                onPress={handleSave}
               >
-                <Text style={styles.btnSecondaryText}>Share JSON</Text>
-              </Pressable>
-              <Pressable
-                style={({ pressed }) => [styles.btnSecondary, { flex: 1 }, pressed && styles.pressed]}
-                onPress={handleReset}
-              >
-                <Text style={[styles.btnSecondaryText, { color: Colors.warning }]}>
-                  Reset Defaults
+                <Text style={styles.btnPrimaryText}>
+                  {saved ? 'Saved ✓' : 'Save Preset'}
                 </Text>
               </Pressable>
+
+              <View style={styles.rowBtns}>
+                <Pressable
+                  style={({ pressed }) => [styles.btnSecondary, { flex: 1 }, pressed && styles.pressed]}
+                  onPress={handleShare}
+                >
+                  <Text style={styles.btnSecondaryText}>Share JSON</Text>
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [styles.btnSecondary, { flex: 1 }, pressed && styles.pressed]}
+                  onPress={handleReset}
+                >
+                  <Text style={[styles.btnSecondaryText, { color: Colors.warning }]}>
+                    Reset Defaults
+                  </Text>
+                </Pressable>
+              </View>
             </View>
-          </View>
+          )}
 
           {/* Dev Tools — only visible in __DEV__ builds */}
           {__DEV__ && (
@@ -486,13 +488,15 @@ export default function SettingsScreen() {
             </View>
           )}
 
-          {/* JSON preview */}
-          <View style={styles.jsonBlock}>
-            <Text style={styles.sectionTitle}>CURRENT PRESET JSON</Text>
-            <Text selectable style={styles.jsonText}>
-              {JSON.stringify(fromDraft(draft) ?? draft, null, 2)}
-            </Text>
-          </View>
+          {/* JSON preview — dev only */}
+          {__DEV__ && (
+            <View style={styles.jsonBlock}>
+              <Text style={styles.sectionTitle}>CURRENT PRESET JSON</Text>
+              <Text selectable style={styles.jsonText}>
+                {JSON.stringify(fromDraft(draft) ?? draft, null, 2)}
+              </Text>
+            </View>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
