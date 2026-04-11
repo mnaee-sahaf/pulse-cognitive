@@ -34,7 +34,7 @@ export default function ChooseCompanionScreen() {
         <View style={styles.header}>
           <Text style={styles.title}>Choose Your Training</Text>
           <Text style={styles.subtitle}>
-            Pick one cognitive skill to sharpen for free. You can unlock all three modes later.
+            Choose which cognitive skill to start training. You can switch between all 4 modes anytime.
           </Text>
         </View>
 
@@ -90,7 +90,7 @@ export default function ChooseCompanionScreen() {
         </View>
 
         <Text style={styles.freeHint}>
-          Your chosen mode is free forever. Unlock all 3 modes for $7.99 anytime.
+          All 4 training modes are included. Switch anytime from the home screen.
         </Text>
 
         <Pressable
