@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback, useState } from 'react';
+import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -30,10 +30,10 @@ export default function GameScreen() {
     totalScore,
     engine,
     roundCount,
-    lives,
     gameMode,
     emberHits,
     perfectStreak,
+    tickTimer,
     setFlashIndex,
     startRecall,
     handleTap,
@@ -45,6 +45,8 @@ export default function GameScreen() {
     resetSession,
   } = state;
 
+  const [timeRemaining, setTimeRemaining] = useState(60000);
+
   const animatedBackground = useAppSettings((s) => s.animatedBackground);
   const backgroundIntensity = useAppSettings((s) => s.backgroundIntensity);
   const hapticFeedback = useAppSettings((s) => s.hapticFeedback);
@@ -52,26 +54,23 @@ export default function GameScreen() {
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flashGapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emberFinishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const prevLivesRef = useRef(lives);
   const flashStartRef = useRef(0);
 
   // Ember: track which cell is the active intercept target and for how long.
-  // Using refs (not state) so checks in onGridTap are always current without
-  // triggering re-renders.
-  // TODO: Ember needs a full redesign — falling Tetris-style items with
-  // increasing speed/complexity that the user intercepts before they land.
-  const EMBER_GRACE_MS = 350; // ms after flash ends where tap still counts
-  const emberTargetRef = useRef(-1);        // cell index currently valid to tap
-  const emberTargetExpiryRef = useRef(0);   // absolute time when target expires
-  const emberHitThisFlashRef = useRef(false); // prevent double-counting same flash
+  const EMBER_GRACE_MS = 350;
+  const emberTargetRef = useRef(-1);
+  const emberTargetExpiryRef = useRef(0);
+  const emberHitThisFlashRef = useRef(false);
 
-  // Buzz when a life is lost
+  // Session timer — tick every 100ms
   useEffect(() => {
-    if (lives < prevLivesRef.current) {
-      if (hapticFeedback) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    }
-    prevLivesRef.current = lives;
-  }, [lives, hapticFeedback]);
+    if (phase === 'ended' || phase === 'idle') return;
+    const interval = setInterval(() => {
+      const remaining = tickTimer();
+      setTimeRemaining(remaining);
+    }, 100);
+    return () => clearInterval(interval);
+  }, [phase, tickTimer]);
 
   // HALT mode: track whether tap was received this trial
   const haltTappedRef = useRef(false);
@@ -291,14 +290,9 @@ export default function GameScreen() {
               </Text>
             )}
 
-            <View style={styles.livesRow}>
-              {Array.from({ length: 3 }, (_, i) => (
-                <View
-                  key={i}
-                  style={[styles.lifesDot, i < lives && styles.lifesDotActive]}
-                />
-              ))}
-            </View>
+            <Text style={[styles.timerText, timeRemaining <= 10000 && styles.timerUrgent]}>
+              {`${Math.floor(timeRemaining / 1000)}s`}
+            </Text>
             {perfectStreak >= 2 && (
               <Text style={[styles.streakBadge, { color: modeColor }]}>
                 {perfectStreak}x STREAK
@@ -449,22 +443,16 @@ const styles = StyleSheet.create({
     color: Colors.warning,
     letterSpacing: 1.5,
   },
-  livesRow: {
-    flexDirection: 'row',
-    gap: 5,
+  timerText: {
+    fontSize: 18,
+    fontWeight: '700',
+    fontFamily: 'serif',
+    color: Colors.textPrimary,
+    letterSpacing: -0.5,
     marginTop: 4,
   },
-  lifesDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: Colors.border,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  lifesDotActive: {
-    backgroundColor: Colors.danger,
-    borderColor: Colors.danger,
+  timerUrgent: {
+    color: Colors.danger,
   },
   streakBadge: {
     fontSize: 10,
