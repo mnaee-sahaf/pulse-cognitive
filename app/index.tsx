@@ -21,7 +21,6 @@ import { loadPurchaseState, type PurchaseState } from '../db/purchaseState';
 import { loadStreakState, getStreakLabel, type StreakState } from '../db/streaks';
 import { Companion } from '../components/Companion';
 import { CompanionSwitcher } from '../components/CompanionSwitcher';
-import { UpgradePrompt } from '../components/UpgradePrompt';
 import { CognitiveRadar, type RadarDimension } from '../components/CognitiveRadar';
 import { AnimatedBackground } from '../components/AnimatedBackground';
 import { useAppSettings } from '../store/appSettingsStore';
@@ -35,7 +34,6 @@ export default function HomeScreen() {
   const [purchaseState, setPurchaseState] = useState<PurchaseState | null>(null);
   const [streak, setStreak] = useState<StreakState>({ currentStreak: 0, bestStreak: 0, lastSessionDate: null, frozen: false });
   const [switcherVisible, setSwitcherVisible] = useState(false);
-  const [upgradeVisible, setUpgradeVisible] = useState(false);
   const animatedBackground = useAppSettings((s) => s.animatedBackground);
   const backgroundIntensity = useAppSettings((s) => s.backgroundIntensity);
 
@@ -63,7 +61,7 @@ export default function HomeScreen() {
   }, [loadData]);
 
   const hasStats = stats.sessionCount > 0;
-  const isFullUnlock = purchaseState?.fullUnlock ?? false;
+  const isFullUnlock = true; // v1: all modes unlocked
   const activeMode = companion?.companionId ?? 'arc';
 
   // Build radar dimensions — lock dimensions not trained by the active mode
@@ -120,13 +118,7 @@ export default function HomeScreen() {
           <View style={styles.radarSection}>
             <Text style={styles.sectionLabel}>COGNITIVE PROFILE</Text>
             <CognitiveRadar dimensions={radarDims} size={180} />
-            {!isFullUnlock && (
-              <Pressable onPress={() => setUpgradeVisible(true)}>
-                <Text style={styles.radarHint}>
-                  Unlock all modes to build a complete profile
-                </Text>
-              </Pressable>
-            )}
+            
           </View>
         )}
 
@@ -174,24 +166,9 @@ export default function HomeScreen() {
         companions={allCompanions}
         purchaseState={purchaseState}
         onSelect={handleSwitchCompanion}
-        onUpgrade={() => {
-          setSwitcherVisible(false);
-          setUpgradeVisible(true);
-        }}
+        onUpgrade={() => setSwitcherVisible(false)}
         onClose={() => setSwitcherVisible(false)}
       />
-
-      {purchaseState && (
-        <UpgradePrompt
-          visible={upgradeVisible}
-          freeCompanionId={purchaseState.freeCompanionId}
-          onPurchase={() => {
-            // TODO: wire up IAP via RevenueCat
-            setUpgradeVisible(false);
-          }}
-          onDismiss={() => setUpgradeVisible(false)}
-        />
-      )}
     </SafeAreaView>
   );
 }
