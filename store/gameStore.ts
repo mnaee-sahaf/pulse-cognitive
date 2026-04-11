@@ -29,7 +29,7 @@ interface GameStore extends GameState {
   handleHaltTimeout: () => void;
   advanceHaltTrial: () => void;
   finishEmberSequence: () => void;
-  loseLife: () => void;
+  recoverFromError: () => void;
   advanceRound: () => void;
   endSession: () => void;
   tickTimer: () => number;
@@ -78,13 +78,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const state = get();
     const { nextState, sessionEnded } = processTap(state, cellIndex, tapTime, state._watchEndTime);
     if (sessionEnded) {
-      // Always route through loseLife for wrong taps — it handles both
-      // recovery (lives > 1) and session end (last life) consistently,
-      // including setting lives=0, building summary, and logging.
-      // The processTap nextState (which sets phase='ended' directly) was
-      // bypassing loseLife and failing to trigger the navigation effect.
-      log.tap('wrong tap → loseLife', { cellIndex, lives: state.lives });
-      get().loseLife();
+      log.tap('wrong tap → recover', { cellIndex });
+      set(nextState as Partial<GameStore>);
+      get().recoverFromError();
     } else {
       set(nextState as Partial<GameStore>);
     }
@@ -95,8 +91,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (state.gameMode !== 'ember' || state.phase !== 'watch' || !state.round) return;
 
     if (cellIndex === state.round.poisonCell) {
-      log.tap('ember poison tap → loseLife', { cellIndex, lives: state.lives });
-      get().loseLife();
+      log.tap('ember poison tap → recover', { cellIndex });
+      get().recoverFromError();
       return;
     }
     // Hit validation (correct cell, within grace window) is done in game.tsx
@@ -116,29 +112,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { nextState, isError } = processHaltTap(state, cellIndex, rt);
     log.tap(`halt ${state.round.trialType} tap`, { cellIndex, rt: Math.round(rt), isError });
 
-    if (isError) {
-      set(nextState as Partial<GameStore>);
-      get().loseLife();
-    } else {
-      set(nextState as Partial<GameStore>);
-      set({ phase: 'feedback' });
-    }
+    set(nextState as Partial<GameStore>);
+    set({ phase: 'feedback' });
   },
 
   handleHaltTimeout: () => {
     const state = get();
     if (state.gameMode !== 'halt' || !state.round) return;
 
-    const { nextState, isError } = processHaltTimeout(state);
-    log.tap(`halt ${state.round.trialType} timeout`, { isError });
+    const { nextState } = processHaltTimeout(state);
+    log.tap(`halt ${state.round.trialType} timeout`);
 
-    if (isError) {
-      set(nextState as Partial<GameStore>);
-      get().loseLife();
-    } else {
-      set(nextState as Partial<GameStore>);
-      set({ phase: 'feedback' });
-    }
+    set(nextState as Partial<GameStore>);
+    set({ phase: 'feedback' });
   },
 
   advanceHaltTrial: () => {
@@ -200,100 +186,58 @@ export const useGameStore = create<GameStore>((set, get) => ({
       });
     } else {
       const missCount = total - hits;
-      log.phase('ember sequence missed → loseLife', { hits, total, missCount, lives: state.lives });
-      // Count hits as correct, total sequence as attempted
+      log.phase('ember sequence missed → recover', { hits, total, missCount });
       set({
         sessionCorrect: state.sessionCorrect + hits,
         sessionTotal: state.sessionTotal + total,
       });
-      get().loseLife();
+      get().recoverFromError();
     }
   },
 
-  loseLife: () => {
+  recoverFromError: () => {
     const state = get();
-    log.phase(`loseLife — ${state.lives - 1} remaining`, { lives: state.lives, round: state.roundCount });
-    if (state.lives > 1) {
-      // HALT mode: simpler recovery — just build a new trial, use feedback phase
-      // for a brief visual pause before the next trial starts.
-      if (state.gameMode === 'halt') {
-        const nextState: GameState = {
-          ...state,
-          lives: state.lives - 1,
-          roundCount: state.roundCount + 1,
-        };
-        const newRound = buildRound(nextState);
-        set({
-          lives: state.lives - 1,
-          roundCount: nextState.roundCount,
-          tapResults: [],
-          recallProgress: [],
-          phase: 'feedback', // will trigger advanceHaltTrial after delay
-          round: newRound,
-          currentFlashIndex: -1,
-        });
-        return;
-      }
+    log.phase('recoverFromError', { round: state.roundCount });
 
-      // Record the failed round so the engine learns from it (mutationSurvived: false,
-      // reduced accuracy) before building the recovery round.
-      const { engine: failedEngine } = applyFailedRound(state);
-      // Recovery: shrink sequence by 2, slow flash moderately, widen gap,
-      // and disable mutations. Flash easing is capped — don't slow beyond
-      // 700ms to avoid sluggish recovery rounds that bore the player.
-      const flashRecoveryMax = Math.min(failedEngine.config.flashCeiling, 700);
-      const recoveryEngine = {
+    const { engine: failedEngine } = applyFailedRound(state);
+    const flashRecoveryMax = Math.min(failedEngine.config.flashCeiling, 700);
+    const recoveryEngine = {
+      ...failedEngine,
+      levers: {
+        ...failedEngine.levers,
+        sequenceGrowth: -2,
+        mutationRate: 0,
+      },
+      currentFlashDuration: Math.min(
+        flashRecoveryMax,
+        failedEngine.currentFlashDuration + 60
+      ),
+      currentFlashGap: Math.min(
+        failedEngine.config.flashGapCeiling,
+        failedEngine.currentFlashGap + 30
+      ),
+    };
+    const rebuiltState: GameState = {
+      ...state,
+      roundCount: state.roundCount + 1,
+      engine: recoveryEngine,
+      emberHits: 0,
+    };
+    const newRound = buildRound(rebuiltState);
+    set({
+      engine: {
         ...failedEngine,
-        levers: {
-          ...failedEngine.levers,
-          sequenceGrowth: -2,
-          mutationRate: 0,
-        },
-        currentFlashDuration: Math.min(
-          flashRecoveryMax,
-          failedEngine.currentFlashDuration + 60
-        ),
-        currentFlashGap: Math.min(
-          failedEngine.config.flashGapCeiling,
-          failedEngine.currentFlashGap + 30
-        ),
-      };
-      const rebuiltState: GameState = {
-        ...state,
-        roundCount: state.roundCount + 1,  // ensure round.round changes so watch effect retriggers
-        engine: recoveryEngine,
-        emberHits: 0,
-      };
-      const newRound = buildRound(rebuiltState);
-      set({
-        engine: {
-          ...failedEngine,
-          // Persist the slowed flash/gap so the next adaptive round starts from the
-          // recovery baseline, not the pre-failure difficulty
-          currentFlashDuration: recoveryEngine.currentFlashDuration,
-          currentFlashGap: recoveryEngine.currentFlashGap,
-        },
-        lives: state.lives - 1,
-        roundCount: rebuiltState.roundCount,
-        recallProgress: [],
-        tapResults: [],
-        phase: 'watch',
-        round: newRound,
-        emberHits: 0,
-        perfectStreak: 0,
-      });
-    } else {
-      const summary = buildSummary(state);
-      log.phase('session ended', {
-        rounds: summary.roundsCompleted,
-        score: summary.totalScore,
-        accuracy: Math.round(summary.accuracy * 100),
-        avgRt: Math.round(summary.avgRt),
-        intensity: Math.round(summary.engineIntensity * 100),
-        maxSeq: summary.maxSequenceLength,
-      });
-      set({ phase: 'ended', lives: 0, summary });
-    }
+        currentFlashDuration: recoveryEngine.currentFlashDuration,
+        currentFlashGap: recoveryEngine.currentFlashGap,
+      },
+      roundCount: rebuiltState.roundCount,
+      recallProgress: [],
+      tapResults: [],
+      phase: 'watch',
+      round: newRound,
+      emberHits: 0,
+      perfectStreak: 0,
+    });
   },
 
   advanceRound: () => {
