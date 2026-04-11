@@ -6,6 +6,13 @@ import {
   Alert,
   StyleSheet,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useGameStore } from '../store/gameStore';
@@ -46,6 +53,15 @@ export default function GameScreen() {
   } = state;
 
   const [timeRemaining, setTimeRemaining] = useState(60000);
+  const [showTimesUp, setShowTimesUp] = useState(false);
+
+  // Pulsing timer animation for last 10 seconds
+  const timerScale = useSharedValue(1);
+  const timerPulsing = useRef(false);
+
+  const timerAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: timerScale.value }],
+  }));
 
   const animatedBackground = useAppSettings((s) => s.animatedBackground);
   const backgroundIntensity = useAppSettings((s) => s.backgroundIntensity);
@@ -68,6 +84,17 @@ export default function GameScreen() {
     const interval = setInterval(() => {
       const remaining = tickTimer();
       setTimeRemaining(remaining);
+      if (remaining <= 10000 && !timerPulsing.current) {
+        timerPulsing.current = true;
+        timerScale.value = withRepeat(
+          withSequence(
+            withTiming(1.15, { duration: 400 }),
+            withTiming(1, { duration: 400 })
+          ),
+          -1,
+          true
+        );
+      }
     }, 100);
     return () => clearInterval(interval);
   }, [phase, tickTimer]);
@@ -158,13 +185,18 @@ export default function GameScreen() {
     return () => clearTimeout(t);
   }, [phase, roundCount]);
 
-  // Navigate to results when session ends (guard against double-navigation).
+  // Navigate to results when session ends — show "TIME'S UP" briefly first.
   const navigatedRef = useRef(false);
   useEffect(() => {
     if (phase === 'ended' && !navigatedRef.current) {
       navigatedRef.current = true;
-      log.nav('session ended → navigating to /results', { hasSummary: !!state.summary });
-      router.replace('/results');
+      if (hapticFeedback) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      setShowTimesUp(true);
+      log.nav('session ended → showing times up overlay', { hasSummary: !!state.summary });
+      const t = setTimeout(() => {
+        router.replace('/results');
+      }, 1200);
+      return () => clearTimeout(t);
     }
   }, [phase]);
 
@@ -293,9 +325,13 @@ export default function GameScreen() {
               </Text>
             )}
 
-            <Text style={[styles.timerText, timeRemaining <= 10000 && styles.timerUrgent]}>
-              {`${Math.floor(timeRemaining / 1000)}s`}
-            </Text>
+            <Animated.Text style={[
+              styles.timerText,
+              timeRemaining <= 10000 && styles.timerUrgent,
+              timerAnimStyle,
+            ]}>
+              {`${Math.ceil(timeRemaining / 1000)}s`}
+            </Animated.Text>
             {perfectStreak >= 2 && (
               <Text style={[styles.streakBadge, { color: modeColor }]}>
                 {perfectStreak}x STREAK
@@ -349,6 +385,12 @@ export default function GameScreen() {
           </View>
         </View>
       </View>
+
+      {showTimesUp && (
+        <View style={styles.timesUpOverlay}>
+          <Text style={styles.timesUpText}>TIME&apos;S UP</Text>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -501,5 +543,18 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: Colors.accent,
     borderRadius: 2,
+  },
+  timesUpOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timesUpText: {
+    fontSize: 42,
+    fontWeight: '700',
+    fontFamily: 'serif',
+    color: '#FFFFFF',
+    letterSpacing: 4,
   },
 });
