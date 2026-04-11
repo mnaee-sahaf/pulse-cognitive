@@ -9,7 +9,6 @@ import { useAppSettings } from '../store/appSettingsStore';
 export default function RootLayout() {
   const setAnimatedBackground = useAppSettings((s) => s.setAnimatedBackground);
   const setBackgroundIntensity = useAppSettings((s) => s.setBackgroundIntensity);
-  const setLives = useAppSettings((s) => s.setLives);
   const setGreenTileFeedback = useAppSettings((s) => s.setGreenTileFeedback);
   const setHapticFeedback = useAppSettings((s) => s.setHapticFeedback);
 
@@ -18,7 +17,6 @@ export default function RootLayout() {
       .then((s) => {
         setAnimatedBackground(s.animatedBackground);
         setBackgroundIntensity(s.backgroundIntensity);
-        setLives(s.lives);
         setGreenTileFeedback(s.greenTileFeedback);
         setHapticFeedback(s.hapticFeedback);
       })

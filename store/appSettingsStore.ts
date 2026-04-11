@@ -3,12 +3,10 @@ import { create } from 'zustand';
 interface AppSettingsStore {
   animatedBackground: boolean;
   backgroundIntensity: number;
-  lives: number;
   greenTileFeedback: boolean;
   hapticFeedback: boolean;
   setAnimatedBackground: (v: boolean) => void;
   setBackgroundIntensity: (v: number) => void;
-  setLives: (v: number) => void;
   setGreenTileFeedback: (v: boolean) => void;
   setHapticFeedback: (v: boolean) => void;
 }
@@ -16,12 +14,10 @@ interface AppSettingsStore {
 export const useAppSettings = create<AppSettingsStore>((set) => ({
   animatedBackground: false,
   backgroundIntensity: 1,
-  lives: 3,
   greenTileFeedback: true,
   hapticFeedback: true,
   setAnimatedBackground: (v) => set({ animatedBackground: v }),
   setBackgroundIntensity: (v) => set({ backgroundIntensity: v }),
-  setLives: (v) => set({ lives: v }),
   setGreenTileFeedback: (v) => set({ greenTileFeedback: v }),
   setHapticFeedback: (v) => set({ hapticFeedback: v }),
 }));

@@ -43,7 +43,7 @@ export default function CountdownScreen() {
         startSessionRef.current = () => {
           if (!sessionStarted.current) {
             sessionStarted.current = true;
-            startSession(profile, config, appSettings.lives, mode);
+            startSession(profile, config, undefined, mode);
           }
         };
       })

@@ -119,18 +119,15 @@ export default function SettingsScreen() {
   const [saved, setSaved] = useState(false);
   const animatedBackground = useAppSettings((s) => s.animatedBackground);
   const backgroundIntensity = useAppSettings((s) => s.backgroundIntensity);
-  const lives = useAppSettings((s) => s.lives);
   const greenTileFeedback = useAppSettings((s) => s.greenTileFeedback);
   const hapticFeedback = useAppSettings((s) => s.hapticFeedback);
 
   const setAnimatedBackground = useAppSettings((s) => s.setAnimatedBackground);
   const setBackgroundIntensity = useAppSettings((s) => s.setBackgroundIntensity);
-  const setLives = useAppSettings((s) => s.setLives);
   const setGreenTileFeedback = useAppSettings((s) => s.setGreenTileFeedback);
   const setHapticFeedback = useAppSettings((s) => s.setHapticFeedback);
 
   const [intensityDraft, setIntensityDraft] = useState(String(backgroundIntensity));
-  const [livesDraft, setLivesDraft] = useState(String(lives));
   const [backupExists, setBackupExists] = useState(false);
 
   useFocusEffect(
@@ -141,8 +138,6 @@ export default function SettingsScreen() {
         setAnimatedBackground(s.animatedBackground);
         setBackgroundIntensity(s.backgroundIntensity);
         setIntensityDraft(String(s.backgroundIntensity));
-        setLives(s.lives);
-        setLivesDraft(String(s.lives));
         setGreenTileFeedback(s.greenTileFeedback);
         setHapticFeedback(s.hapticFeedback);
       }).catch(console.error);
@@ -150,7 +145,7 @@ export default function SettingsScreen() {
   );
 
   function currentAppSettings() {
-    return { animatedBackground, backgroundIntensity, lives, greenTileFeedback, hapticFeedback };
+    return { animatedBackground, backgroundIntensity, lives: 3, greenTileFeedback, hapticFeedback };
   }
 
   async function toggleAnimatedBackground(v: boolean) {
@@ -165,15 +160,6 @@ export default function SettingsScreen() {
     setBackgroundIntensity(clamped);
     setIntensityDraft(String(clamped));
     await saveAppSettings({ ...currentAppSettings(), backgroundIntensity: clamped }).catch(console.error);
-  }
-
-  async function commitLives(raw: string) {
-    const val = parseInt(raw, 10);
-    if (isNaN(val)) return;
-    const clamped = Math.min(10, Math.max(1, val));
-    setLives(clamped);
-    setLivesDraft(String(clamped));
-    await saveAppSettings({ ...currentAppSettings(), lives: clamped }).catch(console.error);
   }
 
   async function toggleGreenTileFeedback(v: boolean) {
@@ -248,7 +234,6 @@ export default function SettingsScreen() {
             const s = await loadAppSettings();
             setAnimatedBackground(s.animatedBackground);
             setBackgroundIntensity(s.backgroundIntensity);
-            setLives(s.lives);
             setGreenTileFeedback(s.greenTileFeedback);
             setHapticFeedback(s.hapticFeedback);
             router.replace('/');
@@ -271,7 +256,6 @@ export default function SettingsScreen() {
             await resetAllData();
             setAnimatedBackground(false);
             setBackgroundIntensity(1.0);
-            setLives(3);
             setGreenTileFeedback(true);
             setHapticFeedback(true);
             router.replace('/choose-companion');
@@ -354,26 +338,6 @@ export default function SettingsScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Gameplay Feel</Text>
             <View style={styles.card}>
-              <View style={[styles.fieldRow, styles.fieldDivider]}>
-                <View style={styles.fieldLeft}>
-                  <Text style={styles.fieldLabel}>Lives</Text>
-                  <Text style={styles.fieldHint}>
-                    Wrong taps per session before game over. Takes effect next session. (1–10)
-                  </Text>
-                </View>
-                <View style={styles.fieldRight}>
-                  <TextInput
-                    style={styles.input}
-                    value={livesDraft}
-                    onChangeText={setLivesDraft}
-                    onBlur={() => commitLives(livesDraft)}
-                    onSubmitEditing={() => commitLives(livesDraft)}
-                    keyboardType="number-pad"
-                    selectTextOnFocus
-                    returnKeyType="done"
-                  />
-                </View>
-              </View>
               <View style={[styles.fieldRow, styles.fieldDivider]}>
                 <View style={styles.fieldLeft}>
                   <Text style={styles.fieldLabel}>Green Tile Feedback</Text>
