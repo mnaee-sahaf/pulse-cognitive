@@ -93,7 +93,9 @@ export interface GameState {
   roundCount: number;
   summary: SessionSummary | null;
   currentFlashIndex: number;  // which cell is currently illuminated (-1 = none)
-  lives: number;              // remaining lives (session ends at 0)
+  lives: number;              // remaining lives (legacy — hidden in v1)
+  sessionDuration: number;    // total session length in ms (default 60000)
+  sessionStartedAt: number;   // Date.now() when session began
   gameMode: GameMode;
   emberHits: number;          // Ember mode: cells intercepted in current watch sequence
   perfectStreak: number;      // consecutive perfect rounds (no wrong taps) — resets on life loss
@@ -134,6 +136,8 @@ export function createInitialGameState(
     summary: null,
     currentFlashIndex: -1,
     lives: startingLives,
+    sessionDuration: 60000,
+    sessionStartedAt: 0,
     gameMode,
     emberHits: 0,
     perfectStreak: 0,

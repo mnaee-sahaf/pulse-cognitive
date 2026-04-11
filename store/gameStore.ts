@@ -31,6 +31,8 @@ interface GameStore extends GameState {
   finishEmberSequence: () => void;
   loseLife: () => void;
   advanceRound: () => void;
+  endSession: () => void;
+  tickTimer: () => number;
   resetSession: () => void;
   _watchEndTime: number;
 }
@@ -54,6 +56,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       phase: 'watch',
       round: firstRound,
       roundCount: 1,
+      sessionStartedAt: Date.now(),
     });
   },
 
@@ -325,6 +328,33 @@ export const useGameStore = create<GameStore>((set, get) => ({
       currentFlashIndex: -1,
       emberHits: 0,
     });
+  },
+
+  endSession: () => {
+    const state = get();
+    if (state.phase === 'ended' || state.phase === 'idle') return;
+    const summary = buildSummary(state);
+    log.phase('session timer ended', {
+      rounds: summary.roundsCompleted,
+      score: summary.totalScore,
+      accuracy: Math.round(summary.accuracy * 100),
+      avgRt: Math.round(summary.avgRt),
+      intensity: Math.round(summary.engineIntensity * 100),
+    });
+    set({ phase: 'ended', summary });
+  },
+
+  tickTimer: () => {
+    const state = get();
+    if (state.phase === 'ended' || state.phase === 'idle' || state.sessionStartedAt === 0) {
+      return state.sessionDuration;
+    }
+    const elapsed = Date.now() - state.sessionStartedAt;
+    const remaining = Math.max(0, state.sessionDuration - elapsed);
+    if (remaining <= 0) {
+      get().endSession();
+    }
+    return remaining;
   },
 
   resetSession: () => {
