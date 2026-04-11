@@ -7,6 +7,8 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "lint": "eslint .",
+    "lint:complexity": "eslint . --rule 'complexity: warn' --rule 'max-depth: warn' --rule 'max-lines-per-function: warn'",
     "test": "jest",
     "test:ci": "jest --ci --coverage"
   },
@@ -45,14 +47,18 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@expo/cli": "^55.0.21",
     "@types/jest": "^30.0.0",
     "@types/react": "~19.1.0",
     "babel-preset-expo": "^55.0.15",
+    "eslint": "^10.2.0",
+    "eslint-plugin-sonarjs": "^4.0.2",
     "jest": "^30.3.0",
     "jest-expo": "^55.0.13",
     "ts-jest": "^29.4.9",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "typescript-eslint": "^8.58.1"
   },
   "private": true
 }
