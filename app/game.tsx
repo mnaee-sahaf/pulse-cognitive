@@ -145,15 +145,18 @@ export default function GameScreen() {
     };
   }, [phase, round?.round]);
 
-  // Feedback phase: buzz on sequence complete, then advance
+  // Feedback phase: buzz on sequence complete, then advance.
+  // Key on roundCount to prevent double-advance when phase toggles rapidly.
+  const feedbackHandledRef = useRef(0);
   useEffect(() => {
     if (phase !== 'feedback') return;
+    if (feedbackHandledRef.current === roundCount) return;
+    feedbackHandledRef.current = roundCount;
     if (hapticFeedback) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    // HALT trials advance faster (200ms) since each trial is a single stimulus
     const delay = gameMode === 'halt' ? 200 : 600;
     const t = setTimeout(() => advanceRound(), delay);
     return () => clearTimeout(t);
-  }, [phase]);
+  }, [phase, roundCount]);
 
   // Navigate to results when session ends (guard against double-navigation).
   const navigatedRef = useRef(false);
