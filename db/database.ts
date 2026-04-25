@@ -203,5 +203,26 @@ async function migrate(db: SQLite.SQLiteDatabase) {
       n INTEGER NOT NULL,
       UNIQUE(dimension_id, checkpoint_type, locked_at)
     );
+
+    -- v2: daily trial — Wordle-style return mechanic.
+    -- One row per calendar date (YYYY-MM-DD).
+    CREATE TABLE IF NOT EXISTS daily_trials (
+      date TEXT PRIMARY KEY,
+      mode TEXT NOT NULL,
+      seed INTEGER NOT NULL,
+      attempted_at TEXT,
+      completed_at TEXT,
+      wave_reached INTEGER,
+      total_score INTEGER
+    );
+
+    -- v2: daily trial streak with weekly shield.
+    CREATE TABLE IF NOT EXISTS daily_trial_streak (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      current_streak INTEGER NOT NULL DEFAULT 0,
+      best_streak INTEGER NOT NULL DEFAULT 0,
+      last_completed_date TEXT,
+      shield_consumed_for_week TEXT
+    );
   `);
 }
