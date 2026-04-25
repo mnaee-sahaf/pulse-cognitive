@@ -19,6 +19,7 @@ import {
 } from '../db/companion';
 import { loadPurchaseState, type PurchaseState } from '../db/purchaseState';
 import { loadStreakState, getStreakLabel, type StreakState } from '../db/streaks';
+import { generateWeeklyReport, trendArrow, type WeeklyReport } from '../db/weeklyReport';
 import { Companion } from '../components/Companion';
 import { CompanionSwitcher } from '../components/CompanionSwitcher';
 import { CognitiveRadar, type RadarDimension } from '../components/CognitiveRadar';
