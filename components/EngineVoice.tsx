@@ -4,10 +4,7 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
-  withDelay,
-  withSequence,
   Easing,
-  runOnJS,
 } from 'react-native-reanimated';
 import { Colors, FontSize, Spacing } from '../constants/theme';
 
@@ -41,17 +38,25 @@ export function EngineVoice({ message, onDismiss, holdMs = 1500 }: EngineVoicePr
   useEffect(() => {
     if (!message) return;
 
-    // Fade + slide in
-    opacity.value = withSequence(
-      withTiming(1, { duration: 220, easing: Easing.out(Easing.cubic) }),
-      withDelay(holdMs, withTiming(0, { duration: 260, easing: Easing.in(Easing.cubic) }, (finished) => {
-        if (finished) runOnJS(onDismiss)();
-      }))
-    );
-    translateY.value = withSequence(
-      withTiming(0, { duration: 240, easing: Easing.out(Easing.cubic) }),
-      withDelay(holdMs, withTiming(-8, { duration: 240, easing: Easing.in(Easing.cubic) }))
-    );
+    const ENTER_MS = 240;
+    const EXIT_MS = 260;
+
+    // Enter
+    opacity.value = withTiming(1, { duration: 220, easing: Easing.out(Easing.cubic) });
+    translateY.value = withTiming(0, { duration: ENTER_MS, easing: Easing.out(Easing.cubic) });
+
+    // Schedule exit on the JS thread; clean up if `message` changes mid-flight.
+    const exitTimer = setTimeout(() => {
+      opacity.value = withTiming(0, { duration: EXIT_MS, easing: Easing.in(Easing.cubic) });
+      translateY.value = withTiming(-8, { duration: EXIT_MS, easing: Easing.in(Easing.cubic) });
+    }, holdMs);
+
+    const dismissTimer = setTimeout(onDismiss, holdMs + EXIT_MS + 16);
+
+    return () => {
+      clearTimeout(exitTimer);
+      clearTimeout(dismissTimer);
+    };
   }, [message]);
 
   const style = useAnimatedStyle(() => ({
