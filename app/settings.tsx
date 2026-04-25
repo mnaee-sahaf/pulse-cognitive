@@ -365,6 +365,49 @@ export default function SettingsScreen() {
             </View>
           </View>
 
+          {/* About & Legal — always visible */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>About</Text>
+            <View style={styles.card}>
+              <Pressable
+                style={({ pressed }) => [styles.fieldRow, styles.fieldDivider, pressed && styles.pressed]}
+                onPress={() => router.push('/about')}
+                accessibilityRole="button"
+                accessibilityLabel="About Pulse"
+              >
+                <View style={styles.fieldLeft}>
+                  <Text style={styles.fieldLabel}>About Pulse</Text>
+                  <Text style={styles.fieldHint}>Version, support contact, the science behind it</Text>
+                </View>
+                <Text style={styles.chev}>›</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.fieldRow, styles.fieldDivider, pressed && styles.pressed]}
+                onPress={() => router.push('/privacy')}
+                accessibilityRole="button"
+                accessibilityLabel="Privacy policy"
+              >
+                <View style={styles.fieldLeft}>
+                  <Text style={styles.fieldLabel}>Privacy Policy</Text>
+                  <Text style={styles.fieldHint}>How your data is handled</Text>
+                </View>
+                <Text style={styles.chev}>›</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.fieldRow, pressed && styles.pressed]}
+                onPress={() => router.push('/terms')}
+                accessibilityRole="button"
+                accessibilityLabel="Terms of use"
+              >
+                <View style={styles.fieldLeft}>
+                  <Text style={styles.fieldLabel}>Terms of Use</Text>
+                  <Text style={styles.fieldHint}>Acceptable use and disclaimers</Text>
+                </View>
+                <Text style={styles.chev}>›</Text>
+              </Pressable>
+            </View>
+          </View>
+
           {/* Engine Sections — dev only */}
           {__DEV__ && SECTIONS.map((section) => (
             <View key={section.title} style={styles.section}>
@@ -576,7 +619,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     borderWidth: 1.5,
     borderColor: Colors.border,
-    borderRadius: 8,
+    borderRadius: Spacing.inputRadius,
     paddingHorizontal: 10,
     paddingVertical: 6,
     fontSize: FontSize.body,
@@ -589,6 +632,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Colors.textTertiary,
     width: 48,
+  },
+  chev: {
+    fontSize: 22,
+    color: Colors.textTertiary,
   },
   actions: { gap: 12 },
   btnPrimary: {
@@ -617,7 +664,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: Colors.textSecondary,
   },
-  pressed: { opacity: 0.75 },
+  pressed: { opacity: 0.85 },
   jsonBlock: {
     gap: 8,
     backgroundColor: Colors.surface,

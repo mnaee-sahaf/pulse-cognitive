@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Colors, FontSize, Spacing } from '../constants/theme';
+import { Colors, FontSize, Spacing, Pressed } from '../constants/theme';
 import { generateWeeklyReport, trendArrow, rtTrendArrow, type WeeklyReport } from '../db/weeklyReport';
 import { loadPurchaseState, type PurchaseState } from '../db/purchaseState';
 
@@ -31,8 +31,10 @@ export default function WeeklyReportScreen() {
           <Text style={styles.emptyText}>No sessions this week yet.</Text>
           <Text style={styles.emptySubtext}>Play a session to start tracking your weekly progress.</Text>
           <Pressable
-            style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.8 }]}
+            style={({ pressed }) => [styles.backBtn, pressed && Pressed]}
             onPress={() => router.back()}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
           >
             <Text style={styles.backBtnText}>Back</Text>
           </Pressable>
@@ -146,7 +148,7 @@ export default function WeeklyReportScreen() {
         )}
 
         <Pressable
-          style={({ pressed }) => [styles.backBtn, pressed && { opacity: 0.8 }]}
+          style={({ pressed }) => [styles.backBtn, pressed && Pressed]}
           onPress={() => router.back()}
         >
           <Text style={styles.backBtnText}>Back</Text>
@@ -260,7 +262,7 @@ const styles = StyleSheet.create({
   },
   insightCard: {
     backgroundColor: Colors.accentSoft,
-    borderRadius: 12,
+    borderRadius: Spacing.cardRadius,
     padding: 14,
   },
   insightText: {
@@ -270,7 +272,7 @@ const styles = StyleSheet.create({
   },
   nudgeCard: {
     backgroundColor: Colors.warning + '12',
-    borderRadius: 12,
+    borderRadius: Spacing.cardRadius,
     borderWidth: 1,
     borderColor: Colors.warning + '33',
     padding: 14,

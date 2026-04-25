@@ -35,7 +35,12 @@ export default function HistoryScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.backBtn}>
+        <Pressable
+          onPress={() => router.back()}
+          style={styles.backBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+        >
           <Text style={styles.backText}>←</Text>
         </Pressable>
         <Text style={styles.title}>History</Text>
@@ -46,6 +51,9 @@ export default function HistoryScreen() {
             setExporting(false);
           }}
           disabled={exporting || sessions.length === 0}
+          accessibilityRole="button"
+          accessibilityLabel="Export sessions as CSV"
+          accessibilityState={{ disabled: exporting || sessions.length === 0 }}
         >
           <Text style={[
             styles.exportBtn,
@@ -327,7 +335,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: Colors.surface,
-    borderRadius: 12,
+    borderRadius: Spacing.cardRadius,
     borderWidth: 1.5,
     borderColor: Colors.border,
     paddingHorizontal: 16,

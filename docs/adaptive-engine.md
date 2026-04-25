@@ -6,8 +6,39 @@ The engine has one job: keep the player in the Zone of Proximal Development (ZPD
 
 That sounds counterintuitive, but it's grounded in cognitive science. Learning is maximized when the player is succeeding most of the time but still being stretched. Below 80% accuracy means they're overwhelmed; above 90% means the game isn't pushing hard enough.
 
-If accuracy is consistently above 90% → too easy → engine pushes harder.  
+If accuracy is consistently above 90% → too easy → engine pushes harder.
 If accuracy drops below 80% → too hard → engine eases back.
+
+---
+
+## First-Session Calibration (Sprint 2, April 2026)
+
+Before adaptation kicks in, the engine runs a **calibration session**. The player profile carries a `calibrated: boolean` field; on a brand-new player (no profile, or `calibrated === false`), `initEngine` returns an `EngineState` with `isCalibration: true` and fixed safe levers:
+
+```
+sequenceGrowth: 1   // sequences still grow naturally
+tempoRamp: 0        // flash duration locked at 600ms
+mutationRate: 0     // no mutations
+gridSize: 3         // 3×3 grid
+flashGapDelta: 0
+```
+
+`updateEngine` checks `state.isCalibration` first and short-circuits — it appends round history and tags `lastBranch: 'calibration'`, but does **not** change levers or branch into adaptive logic. The session plays out at a fixed pace.
+
+After the session ends, `db/playerProfile.updatePlayerProfile()` writes `calibrated = 1` and seeds `baselineRt`, `wmCapacity`, `flexRating`, and `speedAccuracyThreshold` from the observed RTs and accuracy. **Session 2 onwards** the engine sees `calibrated: true` and runs the full adaptive flow seeded from the player's actual baseline.
+
+This fixes the "trivial then sudden wall" problem identified in the audit: previously the engine over-accelerated on round 3 because rounds 1–2 of a default 2-cell sequence were ~99% accurate; now session 1 is constant pacing and session 2 adapts to a real baseline.
+
+---
+
+## Engine Decision Transparency
+
+`EngineState.lastBranch` carries the name of the most recent decision branch (`accel-all`, `push-tempo`, `zpd-hold`, `overwhelm`, etc., or `'calibration'`). `engine/engineInsight.ts` exports two pure functions that translate engine state into player-facing copy:
+
+- `describeEngineDecision(state)` — one-line "what just changed" message, used on the results screen.
+- `describeNextSessionPreview(state)` — "Next session: flashes ~Xms · mutations ~Y%" line.
+
+The results screen pipes these through to make adaptation feel less invisible.
 
 ---
 

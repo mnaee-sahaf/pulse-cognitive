@@ -133,9 +133,6 @@ describe('getExpectedRecallSequence', () => {
     expect(getExpectedRecallSequence(seq, 'double', 3)).toEqual([0, 0, 3, 3, 6, 6, 1, 1]);
   });
 
-  it('returns same sequence for "colorSwitch" (UI-level only)', () => {
-    expect(getExpectedRecallSequence(seq, 'colorSwitch', 3)).toEqual(seq);
-  });
 });
 
 // ── indexToPosition / positionToIndex ──

@@ -129,6 +129,9 @@ export function Cell({
       style={[{ width: size, height: size, shadowColor: themeColor }, wrapperStyle]}
       onPress={handlePress}
       disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={`Cell ${index + 1}`}
+      accessibilityState={{ disabled }}
     >
       <AnimatedView
         style={[

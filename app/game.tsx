@@ -47,6 +47,7 @@ export default function GameScreen() {
     handleWatchTap,
     handleHaltTap,
     handleHaltTimeout,
+    haltLastTrialCorrect,
     finishEmberSequence,
     advanceRound,
     resetSession,
@@ -102,6 +103,7 @@ export default function GameScreen() {
   // HALT mode: track whether tap was received this trial
   const haltTappedRef = useRef(false);
   const haltTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const haltStimulusShownRef = useRef(false);
 
   // Watch phase: flash cells in sequence (or single trial for HALT)
   useEffect(() => {
@@ -110,16 +112,16 @@ export default function GameScreen() {
     // HALT mode: single cell flash with response window timeout
     if (gameMode === 'halt') {
       haltTappedRef.current = false;
+      haltStimulusShownRef.current = false;
       const targetCell = round.displaySequence[0];
       const responseWindow = round.responseWindow ?? 1200;
 
-      // Brief pause before showing the stimulus (matches other modes)
       const HALT_PRE_DELAY = 500;
       const preTimer = setTimeout(() => {
         flashStartRef.current = performance.now();
+        haltStimulusShownRef.current = true;
         setFlashIndex(targetCell);
 
-        // Response window starts when cell appears
         haltTimeoutRef.current = setTimeout(() => {
           setFlashIndex(-1);
           if (!haltTappedRef.current) {
@@ -233,6 +235,7 @@ export default function GameScreen() {
 
   const onGridTap = useCallback((cellIndex: number, time: number) => {
     if (isHaltWatch) {
+      if (!haltStimulusShownRef.current) return; // ignore taps before stimulus
       if (haltTappedRef.current) return; // ignore double-taps
       haltTappedRef.current = true;
       const rt = time - flashStartRef.current;
@@ -261,7 +264,10 @@ export default function GameScreen() {
   const haltTrialLabel = round?.trialType === 'nogo' ? 'NO-GO'
     : round?.trialType === 'stop' ? 'STOP' : 'GO';
 
+  const haltFeedbackLabel = haltLastTrialCorrect ? 'GOOD' : 'MISS';
+
   const phaseLabel =
+    phase === 'feedback' && gameMode === 'halt' ? haltFeedbackLabel :
     phase === 'feedback' ? 'GOOD' :
     gameMode === 'halt' ? haltTrialLabel :
     gameMode === 'ember' ? 'INTERCEPT' :
@@ -292,6 +298,9 @@ export default function GameScreen() {
               onPress={handleQuit}
               style={({ pressed }) => [styles.quitBtn, pressed && { opacity: 0.5 }]}
               hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Quit session"
+              accessibilityHint="Ends the current training session"
             >
               <Text style={styles.quitText}>✕ QUIT</Text>
             </Pressable>
@@ -307,7 +316,8 @@ export default function GameScreen() {
             <Text style={[
               styles.phaseLabel,
               (phase === 'recall' || isEmberWatch) && { color: modeColor },
-              phase === 'feedback' && styles.phaseLabelFeedback,
+              phase === 'feedback' && haltFeedbackLabel === 'GOOD' && styles.phaseLabelFeedback,
+              phase === 'feedback' && gameMode === 'halt' && !haltLastTrialCorrect && { color: Colors.danger },
             ]}>
               {phaseLabel}
             </Text>

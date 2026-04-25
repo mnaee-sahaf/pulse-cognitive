@@ -73,8 +73,17 @@ export function GameExplainer({ gameMode, onDismiss }: GameExplainerProps) {
   const info = EXPLAINERS[gameMode];
 
   return (
-    <Pressable style={styles.backdrop} onPress={onDismiss}>
-      <View style={styles.card}>
+    <Pressable
+      style={styles.backdrop}
+      onPress={onDismiss}
+      accessibilityRole="button"
+      accessibilityLabel="Dismiss instructions and start session"
+    >
+      <View
+        style={styles.card}
+        accessibilityRole="alert"
+        accessibilityLabel={`How to play ${info.modeLabel}: ${info.title}`}
+      >
         {/* Mode badge */}
         <View style={[styles.badge, { backgroundColor: info.color + '18', borderColor: info.color + '40' }]}>
           <Text style={[styles.badgeText, { color: info.color }]}>{info.modeLabel}</Text>

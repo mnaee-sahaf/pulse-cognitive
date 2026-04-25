@@ -11,16 +11,17 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#F7F6F3"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.muneeb.pulse"
+      "bundleIdentifier": "com.athleteos.pulse"
     },
     "android": {
+      "package": "com.athleteos.pulse",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#F7F6F3"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false

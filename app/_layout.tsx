@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Colors } from '../constants/theme';
 import { loadAppSettings } from '../db/appSettings';
 import { useAppSettings } from '../store/appSettingsStore';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 
 export default function RootLayout() {
   const setAnimatedBackground = useAppSettings((s) => s.setAnimatedBackground);
@@ -26,7 +27,9 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" backgroundColor={Colors.background} />
-      <Stack screenOptions={{ headerShown: false, animation: 'fade' }} />
+      <ErrorBoundary>
+        <Stack screenOptions={{ headerShown: false, animation: 'fade' }} />
+      </ErrorBoundary>
     </SafeAreaProvider>
   );
 }

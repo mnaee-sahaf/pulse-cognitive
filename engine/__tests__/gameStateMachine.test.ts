@@ -7,15 +7,25 @@ import {
   completeRound,
   applyFailedRound,
   buildSummary,
-  processBindingAnswer,
   type GameState,
 } from '../gameStateMachine';
 import { ENGINE_CONFIG_DEFAULTS } from '../engineConfig';
+import type { PlayerProfile } from '../adaptiveEngine';
 
 // ── Helpers ──
 
+// Default to a calibrated profile so the engine runs in normal-adaptive mode.
+// Tests that explicitly need calibration mode pass `null` instead.
+const calibratedDefault: PlayerProfile = {
+  baselineRt: 450,
+  wmCapacity: 4,
+  flexRating: 0.5,
+  speedAccuracyThreshold: 350,
+  calibrated: true,
+};
+
 function freshState(mode: 'arc' | 'tide' | 'ember' | 'halt' = 'arc'): GameState {
-  return createInitialGameState(null, ENGINE_CONFIG_DEFAULTS, 3, mode);
+  return createInitialGameState(calibratedDefault, ENGINE_CONFIG_DEFAULTS, 3, mode);
 }
 
 function stateWithRound(mode: 'arc' | 'tide' | 'ember' | 'halt' = 'arc'): GameState {
@@ -209,6 +219,51 @@ describe('processTap', () => {
     const { nextState } = processTap(state, expectedCell, 1300, 1000);
     // RT = tapTime - watchEndTime = 300ms
     expect(nextState.tapResults![0].rt).toBe(300);
+  });
+
+  // Regression: multi-tap RT must be inter-tap (not cumulative-from-watch-end).
+  // Previously suspected of being broken; this test pins the correct behavior.
+  it('computes per-tap RT as inter-tap interval for taps 2, 3, and 4', () => {
+    let state = stateWithRound();
+    state = { ...state, round: { ...state.round!, mutation: 'none', poisonCell: null } };
+    const watchEndTime = 1000;
+    // Tap times spaced 200, 180, 220, 250 ms after the prior anchor
+    const tapTimes = [1200, 1380, 1600, 1850];
+    const expectedRts = [200, 180, 220, 250];
+
+    let current = state;
+    for (let i = 0; i < Math.min(tapTimes.length, current.round!.expectedSequence.length); i++) {
+      const cell = current.round!.expectedSequence[i];
+      const { nextState } = processTap(current, cell, tapTimes[i], watchEndTime);
+      const taps = nextState.tapResults!;
+      expect(taps[i].rt).toBe(expectedRts[i]);
+      current = { ...current, ...nextState } as GameState;
+    }
+  });
+
+  it('multi-tap RT remains correct across consecutive rounds (no cross-round leakage)', () => {
+    // Round 1: 3 expected taps with watchEndTime=1000, tapTimes 1200, 1400, 1600 → RTs 200,200,200
+    let state = stateWithRound();
+    state = { ...state, round: { ...state.round!, mutation: 'none', poisonCell: null } };
+    let current = state;
+    [1200, 1400, 1600].forEach((tapTime, i) => {
+      if (i >= current.round!.expectedSequence.length) return;
+      const cell = current.round!.expectedSequence[i];
+      const { nextState } = processTap(current, cell, tapTime, 1000);
+      current = { ...current, ...nextState } as GameState;
+    });
+    // Simulate completeRound clearing tapResults (sessionRts persists), and a fresh recall phase.
+    const afterRound1 = { ...current, tapResults: [], recallProgress: [], phase: 'recall' as const };
+
+    // Round 2: new watchEndTime=5000, tapTimes 5300, 5500. RTs should be 300, 200 — independent of round 1.
+    const round2State = { ...afterRound1, round: { ...afterRound1.round!, mutation: 'none' as const, poisonCell: null } };
+    const { nextState: r2t1 } = processTap(round2State, round2State.round!.expectedSequence[0], 5300, 5000);
+    expect(r2t1.tapResults![0].rt).toBe(300);
+    const r2afterT1 = { ...round2State, ...r2t1 } as GameState;
+    if (r2afterT1.round!.expectedSequence.length > 1) {
+      const { nextState: r2t2 } = processTap(r2afterT1, r2afterT1.round!.expectedSequence[1], 5500, 5000);
+      expect(r2t2.tapResults![1].rt).toBe(200);
+    }
   });
 });
 
@@ -441,55 +496,5 @@ describe('buildSummary', () => {
     expect(summary.haltOmissionErrors).toBe(2);
     expect(summary.haltSsrt).toBeGreaterThanOrEqual(0);
     expect(summary.haltDPrime).toBeDefined();
-  });
-});
-
-// ── processBindingAnswer ──
-
-describe('processBindingAnswer', () => {
-  it('increments correct count on correct answer', () => {
-    const state: GameState = {
-      ...stateWithRound(),
-      round: {
-        ...stateWithRound().round!,
-        bindingQuestion: {
-          position: 0,
-          correctColor: '#EF4444',
-          options: ['#EF4444', '#3B82F6', '#F59E0B'],
-        },
-      },
-      bindingQuestionsAsked: 0,
-      bindingQuestionsCorrect: 0,
-    };
-
-    const updates = processBindingAnswer(state, '#EF4444');
-    expect(updates.bindingQuestionsAsked).toBe(1);
-    expect(updates.bindingQuestionsCorrect).toBe(1);
-  });
-
-  it('does not increment correct count on wrong answer', () => {
-    const state: GameState = {
-      ...stateWithRound(),
-      round: {
-        ...stateWithRound().round!,
-        bindingQuestion: {
-          position: 0,
-          correctColor: '#EF4444',
-          options: ['#EF4444', '#3B82F6', '#F59E0B'],
-        },
-      },
-      bindingQuestionsAsked: 0,
-      bindingQuestionsCorrect: 0,
-    };
-
-    const updates = processBindingAnswer(state, '#3B82F6');
-    expect(updates.bindingQuestionsAsked).toBe(1);
-    expect(updates.bindingQuestionsCorrect).toBe(0);
-  });
-
-  it('returns empty if no binding question', () => {
-    const state = stateWithRound();
-    const updates = processBindingAnswer(state, '#EF4444');
-    expect(updates).toEqual({});
   });
 });

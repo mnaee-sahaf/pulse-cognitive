@@ -16,7 +16,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useGameStore } from '../store/gameStore';
-import { Colors, FontSize, Spacing } from '../constants/theme';
+import { Colors, FontSize, Spacing, Pressed } from '../constants/theme';
 import { AnimatedBackground } from '../components/AnimatedBackground';
 import { useAppSettings } from '../store/appSettingsStore';
 import { saveSession, getProfileSeedData } from '../db/sessions';
@@ -26,6 +26,7 @@ import { recordSessionForStreak, getStreakLabel, type StreakState } from '../db/
 import { Companion } from '../components/Companion';
 import { LevelUpModal } from '../components/LevelUpModal';
 import { ShareableSnapshot } from '../components/ShareableSnapshot';
+import { describeEngineDecision, describeNextSessionPreview } from '../engine/engineInsight';
 export default function ResultsScreen() {
   const router = useRouter();
   const { summary, engine, resetSession, gameMode } = useGameStore();
@@ -65,9 +66,16 @@ export default function ResultsScreen() {
   }, []);
 
   // Summary may be null briefly while the store update propagates after navigation.
-  // Show nothing for one frame rather than redirecting to home immediately.
+  // Show a calm loading state instead of an empty white screen.
   if (!summary) {
-    return <View style={styles.safe} />;
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.loadingContainer} accessibilityRole="progressbar" accessibilityLabel="Calculating your results">
+          <Text style={styles.loadingTitle}>Calculating results</Text>
+          <Text style={styles.loadingHint}>Tallying your reaction times and accuracy…</Text>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   const { cognitiveScores, totalScore, roundsCompleted, avgRt, bestRt, accuracy } = summary;
@@ -139,6 +147,12 @@ export default function ResultsScreen() {
         {/* Engine report */}
         <View style={styles.engineCard}>
           <Text style={styles.sectionLabel}>ADAPTIVE ENGINE</Text>
+
+          {/* What changed — human-readable explanation of the last decision */}
+          {describeEngineDecision(engine) && (
+            <Text style={styles.engineNarrative}>{describeEngineDecision(engine)}</Text>
+          )}
+
           <View style={styles.engineRow}>
             <Text style={styles.engineKey}>Intensity Reached</Text>
             <Text style={styles.engineVal}>
@@ -152,6 +166,12 @@ export default function ResultsScreen() {
           <View style={styles.engineRow}>
             <Text style={styles.engineKey}>Mutations Survived</Text>
             <Text style={styles.engineVal}>{summary.mutationsSurvived}</Text>
+          </View>
+
+          {/* Next session preview */}
+          <View style={styles.nextPreview}>
+            <Text style={styles.nextLabel}>NEXT SESSION</Text>
+            <Text style={styles.nextValue}>{describeNextSessionPreview(engine)}</Text>
           </View>
         </View>
 
@@ -203,6 +223,8 @@ export default function ResultsScreen() {
           <Pressable
             style={({ pressed }) => [styles.ctaPrimary, pressed && styles.ctaPressed]}
             onPress={() => router.replace('/countdown')}
+            accessibilityRole="button"
+            accessibilityLabel="Play again"
           >
             <Text style={styles.ctaPrimaryText}>Play Again</Text>
           </Pressable>
@@ -212,6 +234,8 @@ export default function ResultsScreen() {
               resetSession();
               router.replace('/');
             }}
+            accessibilityRole="button"
+            accessibilityLabel="Return home"
           >
             <Text style={styles.ctaSecondaryText}>Home</Text>
           </Pressable>
@@ -294,6 +318,25 @@ function MetricBar({
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: Colors.background },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.pagePadding,
+    gap: 8,
+  },
+  loadingTitle: {
+    fontSize: 22,
+    fontFamily: 'serif',
+    fontWeight: '600',
+    color: Colors.textPrimary,
+    letterSpacing: -0.3,
+  },
+  loadingHint: {
+    fontSize: FontSize.body,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+  },
   scroll: {
     paddingHorizontal: Spacing.pagePadding,
     paddingTop: 40,
@@ -431,12 +474,38 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     fontFamily: 'serif',
   },
+  engineNarrative: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    lineHeight: 19,
+    fontStyle: 'italic',
+    marginBottom: 4,
+  },
+  nextPreview: {
+    marginTop: 4,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    gap: 4,
+  },
+  nextLabel: {
+    fontSize: FontSize.label,
+    fontWeight: '600',
+    color: Colors.textTertiary,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  nextValue: {
+    fontSize: FontSize.body,
+    color: Colors.textPrimary,
+    fontWeight: '500',
+  },
   streakCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     backgroundColor: Colors.surface,
-    borderRadius: 12,
+    borderRadius: Spacing.cardRadius,
     borderWidth: 1.5,
     borderColor: Colors.warning + '44',
     paddingHorizontal: 16,
@@ -463,7 +532,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.accentSoft,
     paddingHorizontal: 12,
     paddingVertical: 4,
-    borderRadius: 20,
+    borderRadius: Spacing.pillRadius,
     borderWidth: 1,
     borderColor: Colors.accent + '44',
   },
@@ -477,7 +546,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F59E0B22',
     paddingHorizontal: 16,
     paddingVertical: 6,
-    borderRadius: 8,
+    borderRadius: Spacing.badgeRadius,
     borderWidth: 1,
     borderColor: Colors.warning + '44',
   },
@@ -491,7 +560,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.accentSoft,
     paddingHorizontal: 16,
     paddingVertical: 6,
-    borderRadius: 8,
+    borderRadius: Spacing.badgeRadius,
   },
   levelUpText: {
     fontSize: FontSize.label,
@@ -513,7 +582,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: Colors.border,
   },
-  ctaPressed: { opacity: 0.8 },
+  ctaPressed: Pressed,
   ctaPrimaryText: {
     fontSize: 17,
     fontWeight: '600',

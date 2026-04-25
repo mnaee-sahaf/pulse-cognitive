@@ -47,6 +47,9 @@ export default function ChooseCompanionScreen() {
                 key={c.id}
                 style={[styles.card, isSelected && styles.cardSelected]}
                 onPress={() => setSelected(c.id)}
+                accessibilityRole="button"
+                accessibilityLabel={`Select ${c.name} — trains ${c.trainingFocus}`}
+                accessibilityState={{ selected: isSelected }}
               >
                 <Companion
                   state={{
@@ -101,6 +104,9 @@ export default function ChooseCompanionScreen() {
           ]}
           onPress={handleConfirm}
           disabled={!selected || confirming}
+          accessibilityRole="button"
+          accessibilityLabel={selected ? `Confirm ${selected.toUpperCase()} as your training mode` : 'Select a training mode first'}
+          accessibilityState={{ disabled: !selected || confirming }}
         >
           <Text style={styles.ctaText}>
             {confirming ? 'Starting\u2026' : selected ? `Train ${COMPANIONS[selected].trainingFocus}` : 'Select a training mode'}

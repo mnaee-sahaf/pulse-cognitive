@@ -1,5 +1,5 @@
 export type GridSize = 3 | 4 | 5;
-export type Mutation = 'none' | 'mirror' | 'reverse' | 'poison' | 'colorSwitch' | 'parity' | 'double';
+export type Mutation = 'none' | 'mirror' | 'reverse' | 'poison' | 'parity' | 'double';
 
 export interface CellPosition {
   row: number;
@@ -72,10 +72,6 @@ export function getExpectedRecallSequence(
     case 'double':
       // Recall each cell twice in succession
       return displaySequence.flatMap((idx) => [idx, idx]);
-    case 'colorSwitch':
-      // colorSwitch is handled at the UI level (tap only cells of a specific color)
-      // At the engine level, the expected sequence is unchanged
-      return displaySequence;
     case 'poison':
     case 'none':
     default:

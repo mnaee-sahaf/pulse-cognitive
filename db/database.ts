@@ -73,6 +73,9 @@ async function migrate(db: SQLite.SQLiteDatabase) {
   await db.execAsync(`ALTER TABLE sessions ADD COLUMN game_mode TEXT NOT NULL DEFAULT 'arc'`).catch(() => {});
   await db.execAsync(`ALTER TABLE sessions ADD COLUMN impulse_score REAL NOT NULL DEFAULT 50`).catch(() => {});
 
+  // Sprint 2: first-session calibration flag
+  await db.execAsync(`ALTER TABLE player_profile ADD COLUMN calibrated INTEGER NOT NULL DEFAULT 0`).catch(() => {});
+
   // Migrate existing single-companion row into companion_levels (idempotent)
   const oldCompanion = await db.getFirstAsync<{ companion_id: string; level: number; xp: number }>(
     `SELECT companion_id, level, xp FROM companion WHERE id = 1`

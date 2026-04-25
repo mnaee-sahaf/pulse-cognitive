@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
-import { Colors, FontSize, Spacing } from '../constants/theme';
+import { Colors, FontSize, Spacing, Pressed } from '../constants/theme';
 import { log } from '../lib/devLog';
 
 export default function NotFoundScreen() {
@@ -17,7 +17,7 @@ export default function NotFoundScreen() {
       <Text style={styles.title}>Route not found</Text>
       <Text style={styles.path}>{pathname}</Text>
       <Pressable
-        style={({ pressed }) => [styles.btn, pressed && { opacity: 0.8 }]}
+        style={({ pressed }) => [styles.btn, pressed && Pressed]}
         onPress={() => router.replace('/')}
       >
         <Text style={styles.btnText}>Go Home</Text>

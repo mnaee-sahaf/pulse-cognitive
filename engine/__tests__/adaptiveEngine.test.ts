@@ -25,6 +25,7 @@ const fastProfile: PlayerProfile = {
   wmCapacity: 8,
   flexRating: 0.9,
   speedAccuracyThreshold: 300,
+  calibrated: true,
 };
 
 const slowProfile: PlayerProfile = {
@@ -32,16 +33,36 @@ const slowProfile: PlayerProfile = {
   wmCapacity: 4,
   flexRating: 0.2,
   speedAccuracyThreshold: 400,
+  calibrated: true,
+};
+
+// Stand-in for "default-but-calibrated" — used to test adaptive behavior without
+// going through the first-session calibration path.
+const calibratedDefault: PlayerProfile = {
+  baselineRt: 450,
+  wmCapacity: 4,
+  flexRating: 0.5,
+  speedAccuracyThreshold: 350,
+  calibrated: true,
 };
 
 // ── initEngine ──
 
 describe('initEngine', () => {
-  it('uses default profile when null', () => {
+  it('enters calibration mode for a brand-new player (null profile)', () => {
     const state = initEngine(null);
-    expect(state.levers.gridSize).toBe(3);
+    expect(state.isCalibration).toBe(true);
+    expect(state.lastBranch).toBe('calibration');
+    expect(state.levers.mutationRate).toBe(0);
+    expect(state.levers.tempoRamp).toBe(0);
+    expect(state.currentFlashDuration).toBe(600);
     expect(state.roundHistory).toHaveLength(0);
     expect(state.intensity).toBe(0);
+  });
+
+  it('enters calibration mode for an uncalibrated profile', () => {
+    const state = initEngine({ ...calibratedDefault, calibrated: false });
+    expect(state.isCalibration).toBe(true);
   });
 
   it('seeds faster tempo for fast players', () => {
@@ -64,7 +85,7 @@ describe('initEngine', () => {
   });
 
   it('starts with initial flash duration from config', () => {
-    const state = initEngine(null);
+    const state = initEngine(calibratedDefault);
     // Should be close to initialFlashDuration (600), adjusted by profile
     expect(state.currentFlashDuration).toBeGreaterThan(500);
     expect(state.currentFlashDuration).toBeLessThanOrEqual(600);
@@ -81,14 +102,14 @@ describe('initEngine', () => {
 
 describe('updateEngine — warmup', () => {
   it('applies gentle warmup settings during round 0', () => {
-    const state = initEngine(null);
+    const state = initEngine(calibratedDefault);
     const updated = updateEngine(state, makePerf(), 0);
     expect(updated.levers.sequenceGrowth).toBe(1);
     expect(updated.levers.tempoRamp).toBe(ENGINE_CONFIG_DEFAULTS.warmupTempoRamp);
   });
 
   it('calibrates on round 1 based on round 0 performance', () => {
-    let state = initEngine(null);
+    let state = initEngine(calibratedDefault);
     // Simulate round 0 with fast RT and perfect accuracy
     state = updateEngine(state, makePerf({ avgRt: 280, correct: 4, total: 4 }), 0);
     // Round 1 calibration
@@ -106,7 +127,7 @@ describe('updateEngine — adaptive branches', () => {
     history: RoundPerformance[],
     overrides: Partial<EngineState> = {}
   ): EngineState {
-    const base = initEngine(null);
+    const base = initEngine(calibratedDefault);
     return {
       ...base,
       roundHistory: history,
@@ -181,7 +202,7 @@ describe('updateEngine — grid expansion', () => {
     for (let i = 0; i < 5; i++) {
       history.push(makePerf({ correct: 4, total: 4, avgRt: 300 }));
     }
-    const base = initEngine(null);
+    const base = initEngine(calibratedDefault);
     const state: EngineState = {
       ...base,
       roundHistory: history,
@@ -203,7 +224,7 @@ describe('updateEngine — grid expansion', () => {
     for (let i = 0; i < 5; i++) {
       history.push(makePerf({ correct: 3, total: 4, avgRt: 300 })); // 75% < 88%
     }
-    const base = initEngine(null);
+    const base = initEngine(calibratedDefault);
     const state: EngineState = {
       ...base,
       roundHistory: history,
@@ -223,13 +244,13 @@ describe('updateEngine — grid expansion', () => {
 
 describe('updateEngine — tempo accumulation', () => {
   it('decreases flash duration with negative tempoRamp', () => {
-    const state = initEngine(null);
+    const state = initEngine(calibratedDefault);
     const updated = updateEngine(state, makePerf({ correct: 5, total: 5, avgRt: 280 }), 3);
     expect(updated.currentFlashDuration).toBeLessThan(state.currentFlashDuration);
   });
 
   it('clamps flash duration to floor', () => {
-    const base = initEngine(null);
+    const base = initEngine(calibratedDefault);
     const state: EngineState = {
       ...base,
       currentFlashDuration: ENGINE_CONFIG_DEFAULTS.flashFloor + 5,
@@ -239,7 +260,7 @@ describe('updateEngine — tempo accumulation', () => {
   });
 
   it('clamps flash duration to ceiling', () => {
-    const base = initEngine(null);
+    const base = initEngine(calibratedDefault);
     const state: EngineState = {
       ...base,
       currentFlashDuration: ENGINE_CONFIG_DEFAULTS.flashCeiling - 5,
@@ -258,7 +279,7 @@ describe('updateEngine — tempo accumulation', () => {
 
 describe('updateEngine — mutation streaks', () => {
   it('increments consecutiveMutationSurvives on survival', () => {
-    const state = initEngine(null);
+    const state = initEngine(calibratedDefault);
     const updated = updateEngine(
       state,
       makePerf({ mutationSurvived: true }),
@@ -269,7 +290,7 @@ describe('updateEngine — mutation streaks', () => {
   });
 
   it('increments consecutiveFailedMutations on failure', () => {
-    const state = initEngine(null);
+    const state = initEngine(calibratedDefault);
     const updated = updateEngine(
       state,
       makePerf({ mutationSurvived: false }),
@@ -284,7 +305,7 @@ describe('updateEngine — mutation streaks', () => {
 
 describe('selectMutation', () => {
   it('returns "none" when mutationRate is 0', () => {
-    const result = selectMutation({ ...initEngine(null).levers, mutationRate: 0 }, 0);
+    const result = selectMutation({ ...initEngine(calibratedDefault).levers, mutationRate: 0 }, 0);
     expect(result).toBe('none');
   });
 
@@ -292,7 +313,7 @@ describe('selectMutation', () => {
     // Mock Math.random to always trigger mutation
     const spy = jest.spyOn(Math, 'random').mockReturnValue(0.01);
     const result = selectMutation(
-      { ...initEngine(null).levers, mutationRate: 1.0 },
+      { ...initEngine(calibratedDefault).levers, mutationRate: 1.0 },
       1 // consecutiveFailedMutations > 0
     );
     expect(result).toBe('poison');
@@ -305,7 +326,7 @@ describe('selectMutation', () => {
     // Second call: select type
     spy.mockReturnValueOnce(0.01).mockReturnValueOnce(0.5);
     const result = selectMutation(
-      { ...initEngine(null).levers, mutationRate: 0.2 },
+      { ...initEngine(calibratedDefault).levers, mutationRate: 0.2 },
       0
     );
     expect(['poison', 'mirror', 'reverse']).toContain(result);
@@ -316,10 +337,10 @@ describe('selectMutation', () => {
     const spy = jest.spyOn(Math, 'random');
     spy.mockReturnValueOnce(0.01).mockReturnValueOnce(0.75);
     const result = selectMutation(
-      { ...initEngine(null).levers, mutationRate: 0.5 },
+      { ...initEngine(calibratedDefault).levers, mutationRate: 0.5 },
       0
     );
-    expect(['poison', 'mirror', 'reverse', 'colorSwitch', 'parity', 'double']).toContain(result);
+    expect(['poison', 'mirror', 'reverse', 'parity', 'double']).toContain(result);
     spy.mockRestore();
   });
 });
@@ -328,7 +349,7 @@ describe('selectMutation', () => {
 
 describe('updateEngine — intensity', () => {
   it('intensity stays between 0 and 1', () => {
-    const state = initEngine(null);
+    const state = initEngine(calibratedDefault);
     for (let round = 0; round < 20; round++) {
       const updated = updateEngine(state, makePerf({ correct: 5, total: 5, avgRt: 250 }), round);
       expect(updated.intensity).toBeGreaterThanOrEqual(0);

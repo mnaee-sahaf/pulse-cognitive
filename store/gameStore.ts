@@ -14,7 +14,8 @@ import {
 } from '../engine/gameStateMachine';
 import { updateEngine } from '../engine/adaptiveEngine';
 import type { PlayerProfile } from '../engine/adaptiveEngine';
-import { ENGINE_CONFIG_DEFAULTS, type EngineConfig } from '../engine/engineConfig';
+import { ENGINE_CONFIG_DEFAULTS, HALT_ENGINE_OVERRIDES, type EngineConfig } from '../engine/engineConfig';
+import { calcRoundScore } from '../engine/scoring';
 import { log } from '../lib/devLog';
 
 interface GameStore extends GameState {
@@ -35,15 +36,24 @@ interface GameStore extends GameState {
   tickTimer: () => number;
   resetSession: () => void;
   _watchEndTime: number;
+  _haltLastCheckpointCorrect: number;
+  _haltLastCheckpointTotal: number;
+  haltLastTrialCorrect: boolean;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
   ...createInitialGameState(null),
   _watchEndTime: 0,
+  _haltLastCheckpointCorrect: 0,
+  _haltLastCheckpointTotal: 0,
+  haltLastTrialCorrect: false,
 
   startSession: (profile, config = ENGINE_CONFIG_DEFAULTS, lives = 3, gameMode = 'arc') => {
     log.store('startSession', { gameMode, lives, hasProfile: !!profile });
-    const initial = createInitialGameState(profile, config, lives, gameMode);
+    const effectiveConfig = gameMode === 'halt'
+      ? { ...config, ...HALT_ENGINE_OVERRIDES }
+      : config;
+    const initial = createInitialGameState(profile, effectiveConfig, lives, gameMode);
     const firstRound = buildRound(initial);
     log.phase('session started → watch', {
       seqLen: firstRound.displaySequence.length,
@@ -57,6 +67,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       round: firstRound,
       roundCount: 1,
       sessionStartedAt: Date.now(),
+      _haltLastCheckpointCorrect: 0,
+      _haltLastCheckpointTotal: 0,
     });
   },
 
@@ -112,38 +124,64 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { nextState, isError } = processHaltTap(state, cellIndex, rt);
     log.tap(`halt ${state.round.trialType} tap`, { cellIndex, rt: Math.round(rt), isError });
 
-    set(nextState as Partial<GameStore>);
-    set({ phase: 'feedback' });
+    const score = !isError ? calcRoundScore({
+      sequenceLength: 1,
+      tapRts: [rt],
+      mutationActive: false,
+      engineIntensity: state.engine.intensity,
+      perfectStreak: state.perfectStreak,
+    }) : 0;
+
+    set({
+      ...nextState,
+      phase: 'feedback',
+      haltLastTrialCorrect: !isError,
+      totalScore: state.totalScore + score,
+      perfectStreak: !isError ? state.perfectStreak + 1 : 0,
+    } as Partial<GameStore>);
   },
 
   handleHaltTimeout: () => {
     const state = get();
-    if (state.gameMode !== 'halt' || !state.round) return;
+    if (state.gameMode !== 'halt' || state.phase !== 'watch' || !state.round) return;
 
-    const { nextState } = processHaltTimeout(state);
+    const { nextState, isError } = processHaltTimeout(state);
     log.tap(`halt ${state.round.trialType} timeout`);
 
-    set(nextState as Partial<GameStore>);
-    set({ phase: 'feedback' });
+    const score = !isError ? 5 : 0;
+    set({
+      ...nextState,
+      phase: 'feedback',
+      haltLastTrialCorrect: !isError,
+      totalScore: state.totalScore + score,
+      perfectStreak: !isError ? state.perfectStreak + 1 : 0,
+    } as Partial<GameStore>);
   },
 
   advanceHaltTrial: () => {
     const state = get();
     if (state.gameMode !== 'halt') return;
 
-    // Update engine every 5 trials for smoother adaptation
     let engine = state.engine;
     if (state.haltTrialCount > 0 && state.haltTrialCount % 5 === 0) {
+      const windowCorrect = state.sessionCorrect - state._haltLastCheckpointCorrect;
+      const windowTotal = state.sessionTotal - state._haltLastCheckpointTotal;
+
+      const recentGoRts = state.haltGoRts.slice(-5);
+      const windowAvgRt = recentGoRts.length > 0
+        ? recentGoRts.reduce((s, v) => s + v, 0) / recentGoRts.length
+        : 400;
+
       const roundPerf = {
-        correct: state.sessionCorrect,
-        total: Math.max(1, state.sessionTotal),
-        avgRt: state.haltGoRts.length > 0
-          ? state.haltGoRts[state.haltGoRts.length - 1]
-          : 400,
+        correct: windowCorrect,
+        total: Math.max(1, windowTotal),
+        avgRt: windowAvgRt,
         mutationSurvived: null as boolean | null,
       };
       engine = updateEngine(state.engine, roundPerf, state.roundCount);
     }
+
+    const didCheckpoint = state.haltTrialCount > 0 && state.haltTrialCount % 5 === 0;
 
     const nextState: GameState = {
       ...state,
@@ -166,7 +204,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       currentFlashIndex: -1,
       tapResults: [],
       recallProgress: [],
-    });
+      ...(didCheckpoint ? {
+        _haltLastCheckpointCorrect: state.sessionCorrect,
+        _haltLastCheckpointTotal: state.sessionTotal,
+      } : {}),
+    } as Partial<GameStore>);
   },
 
   finishEmberSequence: () => {
@@ -302,6 +344,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   resetSession: () => {
-    set({ ...createInitialGameState(null), _watchEndTime: 0 });
+    set({ ...createInitialGameState(null), _watchEndTime: 0, _haltLastCheckpointCorrect: 0, _haltLastCheckpointTotal: 0 });
   },
 }));
