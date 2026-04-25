@@ -135,6 +135,7 @@ async function migrate(db: SQLite.SQLiteDatabase) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       session_id TEXT NOT NULL UNIQUE,
       timestamp TEXT NOT NULL,
+      game_mode TEXT NOT NULL DEFAULT 'arc',
       rounds_completed INTEGER NOT NULL,
       max_sequence_length INTEGER NOT NULL DEFAULT 0,
       total_score INTEGER NOT NULL,
@@ -149,7 +150,13 @@ async function migrate(db: SQLite.SQLiteDatabase) {
       wm_score REAL NOT NULL,
       rt_score REAL NOT NULL,
       flex_score REAL NOT NULL,
-      decision_score REAL NOT NULL
+      decision_score REAL NOT NULL,
+      impulse_score REAL NOT NULL DEFAULT 50,
+      theta_wm REAL,
+      theta_speed REAL,
+      theta_inhibition REAL,
+      theta_flex REAL,
+      theta_attention REAL
     );
 
     CREATE TABLE IF NOT EXISTS player_profile (
@@ -159,6 +166,9 @@ async function migrate(db: SQLite.SQLiteDatabase) {
       flex_rating REAL NOT NULL DEFAULT 0.5,
       speed_accuracy_threshold REAL NOT NULL DEFAULT 350,
       session_count INTEGER NOT NULL DEFAULT 0,
+      calibrated INTEGER NOT NULL DEFAULT 0,
+      age_band TEXT,
+      sex TEXT,
       updated_at TEXT NOT NULL
     );
 

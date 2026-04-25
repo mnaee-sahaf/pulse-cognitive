@@ -169,6 +169,8 @@ export const useGameStoreV2 = create<GameStoreV2>((set, get) => ({
       seq: firstRound.sequenceLength,
       flash: firstRound.flashDuration,
       mutation: firstRound.mutation,
+      // DEBUG: expose initial sequence for the autonomous test loop.
+      cells: firstRound.expectedSequence,
     });
 
     set({
@@ -247,6 +249,8 @@ export const useGameStoreV2 = create<GameStoreV2>((set, get) => ({
       isWaveEntry: nextRound.isWaveEntry,
       isBoss: nextRound.isBoss,
       mutation: nextRound.mutation,
+      // DEBUG: expose sequence so the autonomous test loop can replay it.
+      seq: nextRound.expectedSequence,
     });
 
     set({

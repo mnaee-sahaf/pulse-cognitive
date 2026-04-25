@@ -82,7 +82,9 @@ export function EngineVoice({ message, onDismiss, holdMs = 1500 }: EngineVoicePr
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    top: 8,
+    // Clear the iOS dynamic island / status bar. SafeAreaView's inset
+    // doesn't apply to absolutely-positioned children, so we hardcode.
+    top: 56,
     left: Spacing.pagePadding,
     right: Spacing.pagePadding,
     backgroundColor: Colors.surface,
