@@ -76,6 +76,17 @@ async function migrate(db: SQLite.SQLiteDatabase) {
   // Sprint 2: first-session calibration flag
   await db.execAsync(`ALTER TABLE player_profile ADD COLUMN calibrated INTEGER NOT NULL DEFAULT 0`).catch(() => {});
 
+  // v2: demographic profile (age band + sex) for percentile vs population norms
+  await db.execAsync(`ALTER TABLE player_profile ADD COLUMN age_band TEXT`).catch(() => {});
+  await db.execAsync(`ALTER TABLE player_profile ADD COLUMN sex TEXT`).catch(() => {});
+
+  // v2: per-dimension theta reached (raw staircase output) on each session
+  await db.execAsync(`ALTER TABLE sessions ADD COLUMN theta_wm REAL`).catch(() => {});
+  await db.execAsync(`ALTER TABLE sessions ADD COLUMN theta_speed REAL`).catch(() => {});
+  await db.execAsync(`ALTER TABLE sessions ADD COLUMN theta_inhibition REAL`).catch(() => {});
+  await db.execAsync(`ALTER TABLE sessions ADD COLUMN theta_flex REAL`).catch(() => {});
+  await db.execAsync(`ALTER TABLE sessions ADD COLUMN theta_attention REAL`).catch(() => {});
+
   // Migrate existing single-companion row into companion_levels (idempotent)
   const oldCompanion = await db.getFirstAsync<{ companion_id: string; level: number; xp: number }>(
     `SELECT companion_id, level, xp FROM companion WHERE id = 1`
@@ -177,6 +188,20 @@ async function migrate(db: SQLite.SQLiteDatabase) {
       best_streak INTEGER NOT NULL DEFAULT 0,
       last_session_date TEXT,
       frozen INTEGER NOT NULL DEFAULT 0
+    );
+
+    -- v2: per-dimension RCI baselines and monthly checkpoints.
+    -- One row per (dimension, type) snapshot. baseline is locked once,
+    -- monthly snapshots accumulate.
+    CREATE TABLE IF NOT EXISTS checkpoints (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      dimension_id TEXT NOT NULL,
+      checkpoint_type TEXT NOT NULL,    -- 'baseline' | 'monthly'
+      locked_at TEXT NOT NULL,          -- ISO timestamp
+      mean REAL NOT NULL,
+      sd REAL NOT NULL,
+      n INTEGER NOT NULL,
+      UNIQUE(dimension_id, checkpoint_type, locked_at)
     );
   `);
 }
