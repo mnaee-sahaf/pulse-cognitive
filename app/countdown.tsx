@@ -8,18 +8,15 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
-import { useGameStore } from '../store/gameStore';
+import { useGameStoreV2, type GameMode } from '../store/gameStoreV2';
 import { Colors, FontSize } from '../constants/theme';
-import { loadPlayerProfile } from '../db/playerProfile';
-import { loadEngineConfig } from '../db/engineConfig';
 import { loadAppSettings } from '../db/appSettings';
 import { loadCompanion } from '../db/companion';
-import type { GameMode } from '../engine/gameStateMachine';
 import { GameExplainer } from '../components/GameExplainer';
 
 export default function CountdownScreen() {
   const router = useRouter();
-  const startSession = useGameStore((s) => s.startSession);
+  const startRun = useGameStoreV2((s) => s.startRun);
   const [count, setCount] = useState(3);
   const [showExplainer, setShowExplainer] = useState(true);
   const [dataLoaded, setDataLoaded] = useState(false);
@@ -28,7 +25,7 @@ export default function CountdownScreen() {
   const pendingDismissRef = useRef(false);
   const scale = useSharedValue(0.5);
   const opacity = useSharedValue(0);
-  const startSessionRef = useRef<() => void>(() => {});
+  const startRunRef = useRef<() => void>(() => {});
 
   const animStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -37,29 +34,31 @@ export default function CountdownScreen() {
 
   function beginCountdown() {
     setShowExplainer(false);
-    startSessionRef.current();
+    startRunRef.current();
     animateTick(3);
   }
 
   useEffect(() => {
-    Promise.all([loadPlayerProfile(), loadEngineConfig(), loadAppSettings(), loadCompanion()])
-      .then(([profile, config, _appSettings, companion]) => {
+    Promise.all([loadAppSettings(), loadCompanion()])
+      .then(([_appSettings, companion]) => {
         const mode = (companion?.companionId ?? 'arc') as GameMode;
         setGameMode(mode);
         sessionStarted.current = false;
-        startSessionRef.current = () => {
+        startRunRef.current = () => {
           if (!sessionStarted.current) {
             sessionStarted.current = true;
-            startSession(profile, config, undefined, mode);
+            // v2: simple call. Daily trial flag will be set by the home
+            // screen's daily-trial entry in a later iteration; default false.
+            startRun(mode, false);
           }
         };
         setDataLoaded(true);
       })
       .catch(() => {
-        startSessionRef.current = () => {
+        startRunRef.current = () => {
           if (!sessionStarted.current) {
             sessionStarted.current = true;
-            startSession(null);
+            startRun('arc', false);
           }
         };
         setDataLoaded(true);

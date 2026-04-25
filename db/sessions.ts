@@ -1,6 +1,7 @@
 import { getDb } from './database';
 import type { SessionSummary, GameMode } from '../engine/gameStateMachine';
 import type { LeverSettings } from '../engine/adaptiveEngine';
+import type { RunSummaryV2 } from '../store/gameStoreV2';
 
 export interface StoredSession {
   id: number;
@@ -63,6 +64,70 @@ export async function saveSession(
       summary.cognitiveScores.impulseScore,
     ]
   );
+}
+
+/**
+ * Persist a v2 wave-driven run summary into the sessions table.
+ * Reuses the v1 columns where the concept maps cleanly and writes the
+ * new per-dimension theta_* columns added in the v2 migration.
+ */
+export async function saveSessionV2(summary: RunSummaryV2): Promise<void> {
+  const db = await getDb();
+  const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  // v2 doesn't track per-tap RTs at the run level. Accuracy is "did the
+  // run survive?" — by definition, the last round failed, so accuracy is
+  // (highestRound - 1) / highestRound. Approximation; richer per-dimension
+  // metrics live in the theta_* columns.
+  const accuracy = summary.highestRound > 0
+    ? (summary.highestRound - 1) / summary.highestRound
+    : 0;
+
+  await db.runAsync(
+    `INSERT INTO sessions (
+      session_id, timestamp, game_mode, rounds_completed, max_sequence_length, total_score,
+      reaction_times, avg_rt, best_rt, accuracy,
+      mutations_faced, mutations_survived,
+      engine_lever_log, engine_intensity,
+      wm_score, rt_score, flex_score, decision_score, impulse_score,
+      theta_wm, theta_speed, theta_inhibition, theta_flex, theta_attention
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      sessionId,
+      summary.endedAt,
+      summary.mode,
+      summary.highestRound,
+      Math.round(summary.finalThetas.workingMemory ?? 0),
+      summary.totalScore,
+      JSON.stringify([]),                 // reaction_times: not tracked at run level in v2
+      0,                                  // avg_rt: derived later if needed
+      0,                                  // best_rt
+      accuracy,
+      JSON.stringify(Array.from({ length: summary.mutationsFaced }, () => 'mut')),
+      summary.mutationsSurvived,
+      JSON.stringify({ kind: 'v2', wave: summary.highestWave.name, peakCombo: summary.peakCombo }),
+      summary.highestWave.scoreMultiplier / 5.0, // engine_intensity ~= wave depth
+      0, 0, 0, 0, 0,                      // legacy 0-100 cognitive scores: unused in v2
+      summary.finalThetas.workingMemory ?? null,
+      summary.finalThetas.processingSpeed ?? null,
+      summary.finalThetas.inhibition ?? null,
+      summary.finalThetas.flexibility ?? null,
+      summary.finalThetas.sustainedAttention ?? null,
+    ]
+  );
+}
+
+/**
+ * Highest round ever reached for a given mode. Used on the home screen
+ * to surface "Highest Wave" records per mode.
+ */
+export async function getHighestRoundForMode(mode: GameMode): Promise<number> {
+  const db = await getDb();
+  const row = await db.getFirstAsync<{ max_round: number | null }>(
+    `SELECT MAX(rounds_completed) as max_round FROM sessions WHERE game_mode = ?`,
+    [mode]
+  );
+  return row?.max_round ?? 0;
 }
 
 export async function getRecentSessions(limit = 10): Promise<StoredSession[]> {
