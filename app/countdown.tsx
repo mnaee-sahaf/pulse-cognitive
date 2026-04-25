@@ -22,30 +22,38 @@ export default function CountdownScreen() {
   const startSession = useGameStore((s) => s.startSession);
   const [count, setCount] = useState(3);
   const [showExplainer, setShowExplainer] = useState(true);
+  const [dataLoaded, setDataLoaded] = useState(false);
   const [gameMode, setGameMode] = useState<GameMode>('arc');
   const sessionStarted = useRef(false);
+  const pendingDismissRef = useRef(false);
   const scale = useSharedValue(0.5);
   const opacity = useSharedValue(0);
+  const startSessionRef = useRef<() => void>(() => {});
 
   const animStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
     opacity: opacity.value,
   }));
 
-  // Load session data on mount, but wait for explainer dismissal to start countdown
+  function beginCountdown() {
+    setShowExplainer(false);
+    startSessionRef.current();
+    animateTick(3);
+  }
+
   useEffect(() => {
     Promise.all([loadPlayerProfile(), loadEngineConfig(), loadAppSettings(), loadCompanion()])
-      .then(([profile, config, appSettings, companion]) => {
+      .then(([profile, config, _appSettings, companion]) => {
         const mode = (companion?.companionId ?? 'arc') as GameMode;
         setGameMode(mode);
-        // Stash session params for later — start session when explainer is dismissed
         sessionStarted.current = false;
         startSessionRef.current = () => {
           if (!sessionStarted.current) {
             sessionStarted.current = true;
-            startSession(profile, config, appSettings.lives, mode);
+            startSession(profile, config, undefined, mode);
           }
         };
+        setDataLoaded(true);
       })
       .catch(() => {
         startSessionRef.current = () => {
@@ -54,15 +62,24 @@ export default function CountdownScreen() {
             startSession(null);
           }
         };
+        setDataLoaded(true);
       });
   }, []);
 
-  const startSessionRef = useRef<() => void>(() => {});
+  // If user dismissed the explainer before data loaded, start now
+  useEffect(() => {
+    if (dataLoaded && pendingDismissRef.current) {
+      pendingDismissRef.current = false;
+      beginCountdown();
+    }
+  }, [dataLoaded]);
 
   function handleDismissExplainer() {
-    setShowExplainer(false);
-    startSessionRef.current();
-    animateTick(3);
+    if (!dataLoaded) {
+      pendingDismissRef.current = true;
+      return;
+    }
+    beginCountdown();
   }
 
   function animateTick(n: number) {

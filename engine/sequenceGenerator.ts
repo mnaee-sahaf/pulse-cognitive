@@ -1,5 +1,5 @@
 export type GridSize = 3 | 4 | 5;
-export type Mutation = 'none' | 'mirror' | 'reverse' | 'poison';
+export type Mutation = 'none' | 'mirror' | 'reverse' | 'poison' | 'parity' | 'double';
 
 export interface CellPosition {
   row: number;
@@ -66,6 +66,12 @@ export function getExpectedRecallSequence(
       return displaySequence.map((idx) => applyMirror(idx, gridSize));
     case 'reverse':
       return [...displaySequence].reverse();
+    case 'parity':
+      // Only recall cells at even positions (0-indexed) in the sequence
+      return displaySequence.filter((_, i) => i % 2 === 0);
+    case 'double':
+      // Recall each cell twice in succession
+      return displaySequence.flatMap((idx) => [idx, idx]);
     case 'poison':
     case 'none':
     default:

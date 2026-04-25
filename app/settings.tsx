@@ -119,18 +119,15 @@ export default function SettingsScreen() {
   const [saved, setSaved] = useState(false);
   const animatedBackground = useAppSettings((s) => s.animatedBackground);
   const backgroundIntensity = useAppSettings((s) => s.backgroundIntensity);
-  const lives = useAppSettings((s) => s.lives);
   const greenTileFeedback = useAppSettings((s) => s.greenTileFeedback);
   const hapticFeedback = useAppSettings((s) => s.hapticFeedback);
 
   const setAnimatedBackground = useAppSettings((s) => s.setAnimatedBackground);
   const setBackgroundIntensity = useAppSettings((s) => s.setBackgroundIntensity);
-  const setLives = useAppSettings((s) => s.setLives);
   const setGreenTileFeedback = useAppSettings((s) => s.setGreenTileFeedback);
   const setHapticFeedback = useAppSettings((s) => s.setHapticFeedback);
 
   const [intensityDraft, setIntensityDraft] = useState(String(backgroundIntensity));
-  const [livesDraft, setLivesDraft] = useState(String(lives));
   const [backupExists, setBackupExists] = useState(false);
 
   useFocusEffect(
@@ -141,8 +138,6 @@ export default function SettingsScreen() {
         setAnimatedBackground(s.animatedBackground);
         setBackgroundIntensity(s.backgroundIntensity);
         setIntensityDraft(String(s.backgroundIntensity));
-        setLives(s.lives);
-        setLivesDraft(String(s.lives));
         setGreenTileFeedback(s.greenTileFeedback);
         setHapticFeedback(s.hapticFeedback);
       }).catch(console.error);
@@ -150,7 +145,7 @@ export default function SettingsScreen() {
   );
 
   function currentAppSettings() {
-    return { animatedBackground, backgroundIntensity, lives, greenTileFeedback, hapticFeedback };
+    return { animatedBackground, backgroundIntensity, lives: 3, greenTileFeedback, hapticFeedback };
   }
 
   async function toggleAnimatedBackground(v: boolean) {
@@ -165,15 +160,6 @@ export default function SettingsScreen() {
     setBackgroundIntensity(clamped);
     setIntensityDraft(String(clamped));
     await saveAppSettings({ ...currentAppSettings(), backgroundIntensity: clamped }).catch(console.error);
-  }
-
-  async function commitLives(raw: string) {
-    const val = parseInt(raw, 10);
-    if (isNaN(val)) return;
-    const clamped = Math.min(10, Math.max(1, val));
-    setLives(clamped);
-    setLivesDraft(String(clamped));
-    await saveAppSettings({ ...currentAppSettings(), lives: clamped }).catch(console.error);
   }
 
   async function toggleGreenTileFeedback(v: boolean) {
@@ -248,7 +234,6 @@ export default function SettingsScreen() {
             const s = await loadAppSettings();
             setAnimatedBackground(s.animatedBackground);
             setBackgroundIntensity(s.backgroundIntensity);
-            setLives(s.lives);
             setGreenTileFeedback(s.greenTileFeedback);
             setHapticFeedback(s.hapticFeedback);
             router.replace('/');
@@ -271,7 +256,6 @@ export default function SettingsScreen() {
             await resetAllData();
             setAnimatedBackground(false);
             setBackgroundIntensity(1.0);
-            setLives(3);
             setGreenTileFeedback(true);
             setHapticFeedback(true);
             router.replace('/choose-companion');
@@ -303,9 +287,9 @@ export default function SettingsScreen() {
             <Pressable onPress={() => router.back()} style={styles.backBtn}>
               <Text style={styles.backText}>← Back</Text>
             </Pressable>
-            <Text style={styles.title}>Engine Settings</Text>
+            <Text style={styles.title}>Settings</Text>
             <Text style={styles.subtitle}>
-              Changes apply on the next session start. Save your preset, then share the JSON to log it back.
+              Customize your training experience.
             </Text>
           </View>
 
@@ -356,26 +340,6 @@ export default function SettingsScreen() {
             <View style={styles.card}>
               <View style={[styles.fieldRow, styles.fieldDivider]}>
                 <View style={styles.fieldLeft}>
-                  <Text style={styles.fieldLabel}>Lives</Text>
-                  <Text style={styles.fieldHint}>
-                    Wrong taps per session before game over. Takes effect next session. (1–10)
-                  </Text>
-                </View>
-                <View style={styles.fieldRight}>
-                  <TextInput
-                    style={styles.input}
-                    value={livesDraft}
-                    onChangeText={setLivesDraft}
-                    onBlur={() => commitLives(livesDraft)}
-                    onSubmitEditing={() => commitLives(livesDraft)}
-                    keyboardType="number-pad"
-                    selectTextOnFocus
-                    returnKeyType="done"
-                  />
-                </View>
-              </View>
-              <View style={[styles.fieldRow, styles.fieldDivider]}>
-                <View style={styles.fieldLeft}>
                   <Text style={styles.fieldLabel}>Green Tile Feedback</Text>
                   <Text style={styles.fieldHint}>Flash tile green on correct tap</Text>
                 </View>
@@ -401,8 +365,51 @@ export default function SettingsScreen() {
             </View>
           </View>
 
-          {/* Engine Sections */}
-          {SECTIONS.map((section) => (
+          {/* About & Legal — always visible */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>About</Text>
+            <View style={styles.card}>
+              <Pressable
+                style={({ pressed }) => [styles.fieldRow, styles.fieldDivider, pressed && styles.pressed]}
+                onPress={() => router.push('/about')}
+                accessibilityRole="button"
+                accessibilityLabel="About Pulse"
+              >
+                <View style={styles.fieldLeft}>
+                  <Text style={styles.fieldLabel}>About Pulse</Text>
+                  <Text style={styles.fieldHint}>Version, support contact, the science behind it</Text>
+                </View>
+                <Text style={styles.chev}>›</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.fieldRow, styles.fieldDivider, pressed && styles.pressed]}
+                onPress={() => router.push('/privacy')}
+                accessibilityRole="button"
+                accessibilityLabel="Privacy policy"
+              >
+                <View style={styles.fieldLeft}>
+                  <Text style={styles.fieldLabel}>Privacy Policy</Text>
+                  <Text style={styles.fieldHint}>How your data is handled</Text>
+                </View>
+                <Text style={styles.chev}>›</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.fieldRow, pressed && styles.pressed]}
+                onPress={() => router.push('/terms')}
+                accessibilityRole="button"
+                accessibilityLabel="Terms of use"
+              >
+                <View style={styles.fieldLeft}>
+                  <Text style={styles.fieldLabel}>Terms of Use</Text>
+                  <Text style={styles.fieldHint}>Acceptable use and disclaimers</Text>
+                </View>
+                <Text style={styles.chev}>›</Text>
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Engine Sections — dev only */}
+          {__DEV__ && SECTIONS.map((section) => (
             <View key={section.title} style={styles.section}>
               <Text style={styles.sectionTitle}>{section.title.toUpperCase()}</Text>
               <View style={styles.card}>
@@ -437,34 +444,36 @@ export default function SettingsScreen() {
             </View>
           ))}
 
-          {/* Actions */}
-          <View style={styles.actions}>
-            <Pressable
-              style={({ pressed }) => [styles.btnPrimary, pressed && styles.pressed]}
-              onPress={handleSave}
-            >
-              <Text style={styles.btnPrimaryText}>
-                {saved ? 'Saved ✓' : 'Save Preset'}
-              </Text>
-            </Pressable>
-
-            <View style={styles.rowBtns}>
+          {/* Engine actions — dev only */}
+          {__DEV__ && (
+            <View style={styles.actions}>
               <Pressable
-                style={({ pressed }) => [styles.btnSecondary, { flex: 1 }, pressed && styles.pressed]}
-                onPress={handleShare}
+                style={({ pressed }) => [styles.btnPrimary, pressed && styles.pressed]}
+                onPress={handleSave}
               >
-                <Text style={styles.btnSecondaryText}>Share JSON</Text>
-              </Pressable>
-              <Pressable
-                style={({ pressed }) => [styles.btnSecondary, { flex: 1 }, pressed && styles.pressed]}
-                onPress={handleReset}
-              >
-                <Text style={[styles.btnSecondaryText, { color: Colors.warning }]}>
-                  Reset Defaults
+                <Text style={styles.btnPrimaryText}>
+                  {saved ? 'Saved ✓' : 'Save Preset'}
                 </Text>
               </Pressable>
+
+              <View style={styles.rowBtns}>
+                <Pressable
+                  style={({ pressed }) => [styles.btnSecondary, { flex: 1 }, pressed && styles.pressed]}
+                  onPress={handleShare}
+                >
+                  <Text style={styles.btnSecondaryText}>Share JSON</Text>
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [styles.btnSecondary, { flex: 1 }, pressed && styles.pressed]}
+                  onPress={handleReset}
+                >
+                  <Text style={[styles.btnSecondaryText, { color: Colors.warning }]}>
+                    Reset Defaults
+                  </Text>
+                </Pressable>
+              </View>
             </View>
-          </View>
+          )}
 
           {/* Dev Tools — only visible in __DEV__ builds */}
           {__DEV__ && (
@@ -522,13 +531,15 @@ export default function SettingsScreen() {
             </View>
           )}
 
-          {/* JSON preview */}
-          <View style={styles.jsonBlock}>
-            <Text style={styles.sectionTitle}>CURRENT PRESET JSON</Text>
-            <Text selectable style={styles.jsonText}>
-              {JSON.stringify(fromDraft(draft) ?? draft, null, 2)}
-            </Text>
-          </View>
+          {/* JSON preview — dev only */}
+          {__DEV__ && (
+            <View style={styles.jsonBlock}>
+              <Text style={styles.sectionTitle}>CURRENT PRESET JSON</Text>
+              <Text selectable style={styles.jsonText}>
+                {JSON.stringify(fromDraft(draft) ?? draft, null, 2)}
+              </Text>
+            </View>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -608,7 +619,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     borderWidth: 1.5,
     borderColor: Colors.border,
-    borderRadius: 8,
+    borderRadius: Spacing.inputRadius,
     paddingHorizontal: 10,
     paddingVertical: 6,
     fontSize: FontSize.body,
@@ -621,6 +632,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: Colors.textTertiary,
     width: 48,
+  },
+  chev: {
+    fontSize: 22,
+    color: Colors.textTertiary,
   },
   actions: { gap: 12 },
   btnPrimary: {
@@ -649,7 +664,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: Colors.textSecondary,
   },
-  pressed: { opacity: 0.75 },
+  pressed: { opacity: 0.85 },
   jsonBlock: {
     gap: 8,
     backgroundColor: Colors.surface,

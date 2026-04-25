@@ -22,6 +22,7 @@ export interface PlayerProfile {
   wmCapacity: number;           // avg max sequence length before failure last 10 sessions
   flexRating: number;           // mutation survival rate last 10 sessions (0.0–1.0)
   speedAccuracyThreshold: number; // RT at which accuracy drops below 80%
+  calibrated: boolean;          // true once the first session has run; gates adaptive behavior
 }
 
 export interface EngineState {
@@ -35,28 +36,60 @@ export interface EngineState {
   currentFlashDuration: number;  // ms — accumulates tempo deltas each round
   currentFlashGap: number;       // ms — accumulates gap deltas each round
   config: EngineConfig;          // tuning config snapshot for this session
+  isCalibration: boolean;        // true for first-session: no adaptation, fixed safe levers
+  lastBranch: string;            // name of the last engine decision branch (for UI/transparency)
 }
-
-const DEFAULT_LEVERS: LeverSettings = {
-  sequenceGrowth: 1,
-  tempoRamp: -10,
-  mutationRate: 0,
-  gridSize: 3,
-  flashGapDelta: 0,
-};
 
 const DEFAULT_PROFILE: PlayerProfile = {
   baselineRt: 450,
   wmCapacity: 4,
   flexRating: 0.5,
   speedAccuracyThreshold: 350,
+  calibrated: false,
 };
+
+/**
+ * Fixed safe levers used during the first-session calibration. No acceleration,
+ * no mutations — let the player set their own pace so we can seed a real
+ * baselineRt and wmCapacity before adaptation kicks in next session.
+ */
+const CALIBRATION_LEVERS: LeverSettings = {
+  sequenceGrowth: 1,
+  tempoRamp: 0,
+  mutationRate: 0,
+  gridSize: 3,
+  flashGapDelta: 0,
+};
+const CALIBRATION_FLASH_DURATION = 600;
 
 export function initEngine(
   profile: PlayerProfile | null,
   config: EngineConfig = ENGINE_CONFIG_DEFAULTS
 ): EngineState {
   const p = profile ?? DEFAULT_PROFILE;
+
+  // First session — run calibration. Fixed levers, no adaptation. Observed RTs
+  // and max sequence length will seed the real difficulty next session.
+  if (!p.calibrated) {
+    log.engine('initEngine — calibration mode', {
+      reason: profile ? 'profile.calibrated=false' : 'no profile yet',
+      flashDuration: CALIBRATION_FLASH_DURATION,
+    });
+    return {
+      levers: { ...CALIBRATION_LEVERS },
+      roundHistory: [],
+      leverHistory: [],
+      consecutiveMutationSurvives: 0,
+      consecutiveFailedMutations: 0,
+      consecutiveZpdRounds: 0,
+      intensity: 0,
+      currentFlashDuration: CALIBRATION_FLASH_DURATION,
+      currentFlashGap: config.initialFlashGap,
+      config,
+      isCalibration: true,
+      lastBranch: 'calibration',
+    };
+  }
 
   // Seed initial levers via linear interpolation from player profile.
   // This produces a smooth starting difficulty curve instead of binary splits.
@@ -106,6 +139,8 @@ export function initEngine(
     currentFlashDuration: Math.round(flashFromProfile),
     currentFlashGap: config.initialFlashGap,
     config,
+    isCalibration: false,
+    lastBranch: 'init',
   };
 }
 
@@ -140,6 +175,22 @@ export function updateEngine(
 ): EngineState {
   const history = [...state.roundHistory, roundPerf];
   const leverHistory = [...state.leverHistory, { ...state.levers }];
+
+  // Calibration mode — observe, don't adapt. Sequence still grows naturally via
+  // levers.sequenceGrowth=1, but tempo, mutations, and grid stay fixed.
+  if (state.isCalibration) {
+    log.engine(`R${currentRound} → calibration`, {
+      rtRound: Math.round(roundPerf.avgRt),
+      accRound: roundPerf.total === 0 ? 100 : Math.round((roundPerf.correct / roundPerf.total) * 100),
+    });
+    return {
+      ...state,
+      roundHistory: history,
+      leverHistory,
+      lastBranch: 'calibration',
+    };
+  }
+
   let levers = { ...state.levers };
   let { consecutiveMutationSurvives, consecutiveFailedMutations, consecutiveZpdRounds } = state;
   let branch = 'none';
@@ -342,12 +393,16 @@ export function updateEngine(
     currentFlashDuration: newFlashDuration,
     currentFlashGap: newFlashGap,
     config: state.config,
+    isCalibration: false,
+    lastBranch: branch,
   };
 }
 
 /**
  * Decides whether to introduce a mutation this round and which type.
- * Prefers simpler mutations (Poison) when player is struggling.
+ * At low mutation rates, only simple mutations are used.
+ * At higher rates (>0.25), advanced mutations (parity, double) enter the pool.
+ * Prefers simpler mutations when player is struggling.
  */
 export function selectMutation(
   levers: LeverSettings,
@@ -360,7 +415,21 @@ export function selectMutation(
     return 'poison';
   }
 
+  // At higher mutation rates, introduce advanced mutations
+  const useAdvanced = levers.mutationRate > 0.25;
   const roll = Math.random();
+
+  if (useAdvanced) {
+    // 5-way pool: poison, mirror, reverse, parity, double.
+    // (colorSwitch removed in v1 — no UI tap-filtering, would auto-fail.)
+    if (roll < 0.20) return 'poison';
+    if (roll < 0.40) return 'mirror';
+    if (roll < 0.60) return 'reverse';
+    if (roll < 0.80) return 'parity';
+    return 'double';
+  }
+
+  // Standard 3-way pool at lower rates
   if (roll < 0.33) return 'poison';
   if (roll < 0.66) return 'mirror';
   return 'reverse';

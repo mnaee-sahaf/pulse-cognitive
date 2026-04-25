@@ -1,11 +1,12 @@
 import { getDb } from './database';
-import type { SessionSummary } from '../engine/gameStateMachine';
+import type { SessionSummary, GameMode } from '../engine/gameStateMachine';
 import type { LeverSettings } from '../engine/adaptiveEngine';
 
 export interface StoredSession {
   id: number;
   sessionId: string;
   timestamp: string;
+  gameMode: GameMode;
   roundsCompleted: number;
   maxSequenceLength: number;
   totalScore: number;
@@ -21,26 +22,29 @@ export interface StoredSession {
   rtScore: number;
   flexScore: number;
   decisionScore: number;
+  impulseScore: number;
 }
 
 export async function saveSession(
   summary: SessionSummary,
-  leverLog: LeverSettings[]
+  leverLog: LeverSettings[],
+  gameMode: GameMode = 'arc'
 ): Promise<void> {
   const db = await getDb();
   const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   await db.runAsync(
     `INSERT INTO sessions (
-      session_id, timestamp, rounds_completed, max_sequence_length, total_score,
+      session_id, timestamp, game_mode, rounds_completed, max_sequence_length, total_score,
       reaction_times, avg_rt, best_rt, accuracy,
       mutations_faced, mutations_survived,
       engine_lever_log, engine_intensity,
-      wm_score, rt_score, flex_score, decision_score
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      wm_score, rt_score, flex_score, decision_score, impulse_score
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       sessionId,
       new Date().toISOString(),
+      gameMode,
       summary.roundsCompleted,
       summary.maxSequenceLength,
       summary.totalScore,
@@ -56,6 +60,7 @@ export async function saveSession(
       summary.cognitiveScores.rtScore,
       summary.cognitiveScores.flexScore,
       summary.cognitiveScores.decisionScore,
+      summary.cognitiveScores.impulseScore,
     ]
   );
 }
@@ -127,13 +132,15 @@ export async function getCognitiveProfile(n = 10): Promise<{
   wmScore: number;
   flexScore: number;
   decisionScore: number;
+  impulseScore: number;
 }> {
   const db = await getDb();
   const row = await db.getFirstAsync<any>(
     `SELECT
       AVG(rt_score) as rt, AVG(wm_score) as wm,
-      AVG(flex_score) as flex, AVG(decision_score) as decision
-     FROM (SELECT rt_score, wm_score, flex_score, decision_score
+      AVG(flex_score) as flex, AVG(decision_score) as decision,
+      AVG(impulse_score) as impulse
+     FROM (SELECT rt_score, wm_score, flex_score, decision_score, impulse_score
            FROM sessions ORDER BY timestamp DESC LIMIT ?)`,
     [n]
   );
@@ -142,6 +149,7 @@ export async function getCognitiveProfile(n = 10): Promise<{
     wmScore: Math.round(row?.wm ?? 0),
     flexScore: Math.round(row?.flex ?? 0),
     decisionScore: Math.round(row?.decision ?? 0),
+    impulseScore: Math.round(row?.impulse ?? 50),
   };
 }
 
@@ -150,6 +158,7 @@ function deserializeSession(row: any): StoredSession {
     id: row.id,
     sessionId: row.session_id,
     timestamp: row.timestamp,
+    gameMode: (row.game_mode ?? 'arc') as GameMode,
     roundsCompleted: row.rounds_completed,
     maxSequenceLength: row.max_sequence_length ?? 0,
     totalScore: row.total_score,
@@ -165,5 +174,6 @@ function deserializeSession(row: any): StoredSession {
     rtScore: row.rt_score,
     flexScore: row.flex_score,
     decisionScore: row.decision_score,
+    impulseScore: row.impulse_score ?? 50,
   };
 }

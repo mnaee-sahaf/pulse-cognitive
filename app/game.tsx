@@ -6,6 +6,13 @@ import {
   Alert,
   StyleSheet,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useGameStore } from '../store/gameStore';
@@ -30,18 +37,32 @@ export default function GameScreen() {
     totalScore,
     engine,
     roundCount,
-    lives,
     gameMode,
     emberHits,
     perfectStreak,
+    tickTimer,
     setFlashIndex,
     startRecall,
     handleTap,
     handleWatchTap,
+    handleHaltTap,
+    handleHaltTimeout,
+    haltLastTrialCorrect,
     finishEmberSequence,
     advanceRound,
     resetSession,
   } = state;
+
+  const [timeRemaining, setTimeRemaining] = useState(60000);
+  const [showTimesUp, setShowTimesUp] = useState(false);
+
+  // Pulsing timer animation for last 10 seconds
+  const timerScale = useSharedValue(1);
+  const timerPulsing = useRef(false);
+
+  const timerAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: timerScale.value }],
+  }));
 
   const animatedBackground = useAppSettings((s) => s.animatedBackground);
   const backgroundIntensity = useAppSettings((s) => s.backgroundIntensity);
@@ -50,30 +71,71 @@ export default function GameScreen() {
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flashGapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emberFinishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const prevLivesRef = useRef(lives);
   const flashStartRef = useRef(0);
 
   // Ember: track which cell is the active intercept target and for how long.
-  // Using refs (not state) so checks in onGridTap are always current without
-  // triggering re-renders.
-  // TODO: Ember needs a full redesign — falling Tetris-style items with
-  // increasing speed/complexity that the user intercepts before they land.
-  const EMBER_GRACE_MS = 350; // ms after flash ends where tap still counts
-  const emberTargetRef = useRef(-1);        // cell index currently valid to tap
-  const emberTargetExpiryRef = useRef(0);   // absolute time when target expires
-  const emberHitThisFlashRef = useRef(false); // prevent double-counting same flash
+  const EMBER_GRACE_MS = 350;
+  const emberTargetRef = useRef(-1);
+  const emberTargetExpiryRef = useRef(0);
+  const emberHitThisFlashRef = useRef(false);
 
-  // Buzz when a life is lost
+  // Session timer — tick every 100ms
   useEffect(() => {
-    if (lives < prevLivesRef.current) {
-      if (hapticFeedback) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    }
-    prevLivesRef.current = lives;
-  }, [lives, hapticFeedback]);
+    if (phase === 'ended' || phase === 'idle') return;
+    const interval = setInterval(() => {
+      const remaining = tickTimer();
+      setTimeRemaining(remaining);
+      if (remaining <= 10000 && !timerPulsing.current) {
+        timerPulsing.current = true;
+        timerScale.value = withRepeat(
+          withSequence(
+            withTiming(1.15, { duration: 400 }),
+            withTiming(1, { duration: 400 })
+          ),
+          -1,
+          true
+        );
+      }
+    }, 100);
+    return () => clearInterval(interval);
+  }, [phase, tickTimer]);
 
-  // Watch phase: flash cells in sequence
+  // HALT mode: track whether tap was received this trial
+  const haltTappedRef = useRef(false);
+  const haltTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const haltStimulusShownRef = useRef(false);
+
+  // Watch phase: flash cells in sequence (or single trial for HALT)
   useEffect(() => {
     if (phase !== 'watch' || !round) return;
+
+    // HALT mode: single cell flash with response window timeout
+    if (gameMode === 'halt') {
+      haltTappedRef.current = false;
+      haltStimulusShownRef.current = false;
+      const targetCell = round.displaySequence[0];
+      const responseWindow = round.responseWindow ?? 1200;
+
+      const HALT_PRE_DELAY = 500;
+      const preTimer = setTimeout(() => {
+        flashStartRef.current = performance.now();
+        haltStimulusShownRef.current = true;
+        setFlashIndex(targetCell);
+
+        haltTimeoutRef.current = setTimeout(() => {
+          setFlashIndex(-1);
+          if (!haltTappedRef.current) {
+            handleHaltTimeout();
+          }
+        }, responseWindow);
+      }, HALT_PRE_DELAY);
+
+      return () => {
+        clearTimeout(preTimer);
+        if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+        if (haltTimeoutRef.current) clearTimeout(haltTimeoutRef.current);
+      };
+    }
 
     let i = 0;
     const flashNext = () => {
@@ -112,21 +174,31 @@ export default function GameScreen() {
     };
   }, [phase, round?.round]);
 
-  // Feedback phase: buzz on sequence complete, then advance
+  // Feedback phase: buzz on sequence complete, then advance.
+  // Key on roundCount to prevent double-advance when phase toggles rapidly.
+  const feedbackHandledRef = useRef(0);
   useEffect(() => {
     if (phase !== 'feedback') return;
+    if (feedbackHandledRef.current === roundCount) return;
+    feedbackHandledRef.current = roundCount;
     if (hapticFeedback) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    const t = setTimeout(() => advanceRound(), 600);
+    const delay = gameMode === 'halt' ? 200 : 600;
+    const t = setTimeout(() => advanceRound(), delay);
     return () => clearTimeout(t);
-  }, [phase]);
+  }, [phase, roundCount]);
 
-  // Navigate to results when session ends (guard against double-navigation).
+  // Navigate to results when session ends — show "TIME'S UP" briefly first.
   const navigatedRef = useRef(false);
   useEffect(() => {
     if (phase === 'ended' && !navigatedRef.current) {
       navigatedRef.current = true;
-      log.nav('session ended → navigating to /results', { hasSummary: !!state.summary });
-      router.replace('/results');
+      if (hapticFeedback) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      setShowTimesUp(true);
+      log.nav('session ended → showing times up overlay', { hasSummary: !!state.summary });
+      const t = setTimeout(() => {
+        router.replace('/results');
+      }, 1200);
+      return () => clearTimeout(t);
     }
   }, [phase]);
 
@@ -159,9 +231,18 @@ export default function GameScreen() {
 
   const isRecalling = phase === 'recall';
   const isEmberWatch = gameMode === 'ember' && phase === 'watch';
+  const isHaltWatch = gameMode === 'halt' && phase === 'watch';
 
   const onGridTap = useCallback((cellIndex: number, time: number) => {
-    if (isEmberWatch) {
+    if (isHaltWatch) {
+      if (!haltStimulusShownRef.current) return; // ignore taps before stimulus
+      if (haltTappedRef.current) return; // ignore double-taps
+      haltTappedRef.current = true;
+      const rt = time - flashStartRef.current;
+      setFlashIndex(-1);
+      if (haltTimeoutRef.current) clearTimeout(haltTimeoutRef.current);
+      handleHaltTap(cellIndex, rt);
+    } else if (isEmberWatch) {
       const rt = time - flashStartRef.current;
       const isValidTarget =
         cellIndex === emberTargetRef.current &&
@@ -169,21 +250,26 @@ export default function GameScreen() {
         !emberHitThisFlashRef.current;
 
       if (isValidTarget) {
-        emberHitThisFlashRef.current = true; // lock out double-taps on same flash
+        emberHitThisFlashRef.current = true;
         handleWatchTap(cellIndex, rt);
       } else if (round && cellIndex === round.poisonCell) {
-        // Route poison taps to the store regardless of timing so loseLife fires
         handleWatchTap(cellIndex, rt);
       }
-      // Invalid non-poison taps are silently ignored
     } else {
       handleTap(cellIndex, time);
     }
-  }, [isEmberWatch, handleWatchTap, handleTap]);
+  }, [isEmberWatch, isHaltWatch, handleWatchTap, handleHaltTap, handleTap]);
 
   if (!round) return null;
+  const haltTrialLabel = round?.trialType === 'nogo' ? 'NO-GO'
+    : round?.trialType === 'stop' ? 'STOP' : 'GO';
+
+  const haltFeedbackLabel = haltLastTrialCorrect ? 'GOOD' : 'MISS';
+
   const phaseLabel =
+    phase === 'feedback' && gameMode === 'halt' ? haltFeedbackLabel :
     phase === 'feedback' ? 'GOOD' :
+    gameMode === 'halt' ? haltTrialLabel :
     gameMode === 'ember' ? 'INTERCEPT' :
     gameMode === 'tide' && phase === 'recall' ? 'REVERSE' :
     phase === 'watch' ? 'WATCH' :
@@ -212,6 +298,9 @@ export default function GameScreen() {
               onPress={handleQuit}
               style={({ pressed }) => [styles.quitBtn, pressed && { opacity: 0.5 }]}
               hitSlop={12}
+              accessibilityRole="button"
+              accessibilityLabel="Quit session"
+              accessibilityHint="Ends the current training session"
             >
               <Text style={styles.quitText}>✕ QUIT</Text>
             </Pressable>
@@ -227,7 +316,8 @@ export default function GameScreen() {
             <Text style={[
               styles.phaseLabel,
               (phase === 'recall' || isEmberWatch) && { color: modeColor },
-              phase === 'feedback' && styles.phaseLabelFeedback,
+              phase === 'feedback' && haltFeedbackLabel === 'GOOD' && styles.phaseLabelFeedback,
+              phase === 'feedback' && gameMode === 'halt' && !haltLastTrialCorrect && { color: Colors.danger },
             ]}>
               {phaseLabel}
             </Text>
@@ -245,14 +335,13 @@ export default function GameScreen() {
               </Text>
             )}
 
-            <View style={styles.livesRow}>
-              {Array.from({ length: 3 }, (_, i) => (
-                <View
-                  key={i}
-                  style={[styles.lifesDot, i < lives && styles.lifesDotActive]}
-                />
-              ))}
-            </View>
+            <Animated.Text style={[
+              styles.timerText,
+              timeRemaining <= 10000 && styles.timerUrgent,
+              timerAnimStyle,
+            ]}>
+              {`${Math.ceil(timeRemaining / 1000)}s`}
+            </Animated.Text>
             {perfectStreak >= 2 && (
               <Text style={[styles.streakBadge, { color: modeColor }]}>
                 {perfectStreak}x STREAK
@@ -286,7 +375,7 @@ export default function GameScreen() {
             poisonCell={round.poisonCell}
             tapStates={tapStates()}
             onTap={onGridTap}
-            disabled={!isRecalling && !isEmberWatch}
+            disabled={!isRecalling && !isEmberWatch && !isHaltWatch}
             themeColor={modeColor}
             tileShape={tileShape}
             hideWhenIdle={gameMode === 'ember'}
@@ -306,6 +395,12 @@ export default function GameScreen() {
           </View>
         </View>
       </View>
+
+      {showTimesUp && (
+        <View style={styles.timesUpOverlay}>
+          <Text style={styles.timesUpText}>TIME&apos;S UP</Text>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -403,22 +498,16 @@ const styles = StyleSheet.create({
     color: Colors.warning,
     letterSpacing: 1.5,
   },
-  livesRow: {
-    flexDirection: 'row',
-    gap: 5,
+  timerText: {
+    fontSize: 18,
+    fontWeight: '700',
+    fontFamily: 'serif',
+    color: Colors.textPrimary,
+    letterSpacing: -0.5,
     marginTop: 4,
   },
-  lifesDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: Colors.border,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  lifesDotActive: {
-    backgroundColor: Colors.danger,
-    borderColor: Colors.danger,
+  timerUrgent: {
+    color: Colors.danger,
   },
   streakBadge: {
     fontSize: 10,
@@ -464,5 +553,18 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: Colors.accent,
     borderRadius: 2,
+  },
+  timesUpOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timesUpText: {
+    fontSize: 42,
+    fontWeight: '700',
+    fontFamily: 'serif',
+    color: '#FFFFFF',
+    letterSpacing: 4,
   },
 });

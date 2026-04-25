@@ -5,11 +5,11 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Colors } from '../constants/theme';
 import { loadAppSettings } from '../db/appSettings';
 import { useAppSettings } from '../store/appSettingsStore';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 
 export default function RootLayout() {
   const setAnimatedBackground = useAppSettings((s) => s.setAnimatedBackground);
   const setBackgroundIntensity = useAppSettings((s) => s.setBackgroundIntensity);
-  const setLives = useAppSettings((s) => s.setLives);
   const setGreenTileFeedback = useAppSettings((s) => s.setGreenTileFeedback);
   const setHapticFeedback = useAppSettings((s) => s.setHapticFeedback);
 
@@ -18,7 +18,6 @@ export default function RootLayout() {
       .then((s) => {
         setAnimatedBackground(s.animatedBackground);
         setBackgroundIntensity(s.backgroundIntensity);
-        setLives(s.lives);
         setGreenTileFeedback(s.greenTileFeedback);
         setHapticFeedback(s.hapticFeedback);
       })
@@ -28,7 +27,9 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <StatusBar style="dark" backgroundColor={Colors.background} />
-      <Stack screenOptions={{ headerShown: false, animation: 'fade' }} />
+      <ErrorBoundary>
+        <Stack screenOptions={{ headerShown: false, animation: 'fade' }} />
+      </ErrorBoundary>
     </SafeAreaProvider>
   );
 }

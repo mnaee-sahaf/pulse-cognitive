@@ -41,7 +41,7 @@ const EXPLAINERS: Record<GameMode, ExplainerContent> = {
   ember: {
     title: 'Ember',
     modeLabel: 'INTERCEPT',
-    focus: 'Reaction Speed',
+    focus: 'Processing Speed',
     color: COMPANIONS.ember.stages[0].primaryColor,
     steps: [
       'Cells light up one at a time',
@@ -49,6 +49,18 @@ const EXPLAINERS: Record<GameMode, ExplainerContent> = {
       'Miss too many and you lose a life',
     ],
     tip: 'Watch for poison cells — tapping one costs a life instantly.',
+  },
+  halt: {
+    title: 'Halt',
+    modeLabel: 'HALT',
+    focus: 'Impulse Control',
+    color: COMPANIONS.halt.stages[0].primaryColor,
+    steps: [
+      'Cells light up rapidly — tap Go cells (green)',
+      'Do NOT tap No-Go cells (red border)',
+      'Stop-Signal trials change mid-flash — cancel your tap',
+    ],
+    tip: 'Speed matters, but false alarms cost lives. Control your impulses.',
   },
 };
 
@@ -61,8 +73,17 @@ export function GameExplainer({ gameMode, onDismiss }: GameExplainerProps) {
   const info = EXPLAINERS[gameMode];
 
   return (
-    <Pressable style={styles.backdrop} onPress={onDismiss}>
-      <View style={styles.card}>
+    <Pressable
+      style={styles.backdrop}
+      onPress={onDismiss}
+      accessibilityRole="button"
+      accessibilityLabel="Dismiss instructions and start session"
+    >
+      <View
+        style={styles.card}
+        accessibilityRole="alert"
+        accessibilityLabel={`How to play ${info.modeLabel}: ${info.title}`}
+      >
         {/* Mode badge */}
         <View style={[styles.badge, { backgroundColor: info.color + '18', borderColor: info.color + '40' }]}>
           <Text style={[styles.badgeText, { color: info.color }]}>{info.modeLabel}</Text>

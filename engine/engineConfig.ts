@@ -68,3 +68,22 @@ export const ENGINE_CONFIG_DEFAULTS: EngineConfig = {
   gridExpand4to5Round: 12,
   gridExpandAccuracy: 0.88,
 };
+
+/**
+ * HALT mode overrides: RTs are naturally higher (find + tap a single cell)
+ * and mixed trial types (go/nogo/stop) produce lower accuracy than recall.
+ * Thresholds, ramp rates, and tolerance are recalibrated accordingly.
+ */
+export const HALT_ENGINE_OVERRIDES: Partial<EngineConfig> = {
+  rtFastThreshold: 500,
+  rtSlowThreshold: 650,
+  overwhelmThreshold: 0.65,
+  zpdUpper: 0.85,
+  accelTempoRamp: -50,
+  pushTempoRamp: -40,
+  steadyPushTempoRamp: -30,
+  easeTempoRamp: 20,
+  flashFloor: 250,
+  gridExpand3to4Round: 15,
+  gridExpand4to5Round: 35,
+};

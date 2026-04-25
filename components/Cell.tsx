@@ -1,12 +1,10 @@
 import React, { useEffect, useMemo } from 'react';
-import { Pressable } from 'react-native';
-import Svg, { Polygon, Circle, Rect } from 'react-native-svg';
+import { View, Pressable } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useAppSettings } from '../store/appSettingsStore';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  useAnimatedProps,
   withTiming,
   withSequence,
   withSpring,
@@ -16,32 +14,8 @@ import { Colors } from '../constants/theme';
 
 export type TileShape = 'circle' | 'triangle' | 'hexagon' | 'square';
 
-const AnimatedPolygon = Animated.createAnimatedComponent(Polygon);
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
-const AnimatedRect = Animated.createAnimatedComponent(Rect);
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
-// Pointy-top hexagon vertices, inset within size×size viewBox
-function hexPoints(size: number, inset = 0.86): string {
-  const cx = size / 2;
-  const cy = size / 2;
-  const R = (size / 2) * inset;
-  return Array.from({ length: 6 }, (_, i) => {
-    const angle = -Math.PI / 2 + (Math.PI / 3) * i;
-    return `${cx + R * Math.cos(angle)},${cy + R * Math.sin(angle)}`;
-  }).join(' ');
-}
-
-// Equilateral triangle pointing up, centered in size×size viewBox
-function triPoints(size: number, inset = 0.86): string {
-  const margin = (size * (1 - inset)) / 2;
-  const s = size - 2 * margin;
-  const h = s * (Math.sqrt(3) / 2);
-  const cx = size / 2;
-  const topY = (size - h) / 2;
-  const botY = topY + h;
-  return `${cx},${topY} ${size - margin},${botY} ${margin},${botY}`;
-}
+const AnimatedView = Animated.createAnimatedComponent(View);
 
 interface CellProps {
   index: number;
@@ -71,19 +45,13 @@ export function Cell({
   const greenTileFeedback = useAppSettings((s) => s.greenTileFeedback);
   const hapticFeedback = useAppSettings((s) => s.hapticFeedback);
 
-  const shapePoints = useMemo(() => {
-    if (tileShape === 'hexagon') return hexPoints(size);
-    if (tileShape === 'triangle') return triPoints(size);
-    return '';
-  }, [tileShape, size]);
-
   const idleColor = useMemo(
     () => hideWhenIdle ? themeColor + '00' : themeColor + '30',
     [hideWhenIdle, themeColor]
   );
   const poisonColor = '#FFAAAA';
 
-  const fillColor = useSharedValue(idleColor);
+  const bgColor = useSharedValue(idleColor);
   const scale = useSharedValue(1);
   const translateX = useSharedValue(0);
   const glowOpacity = useSharedValue(0);
@@ -91,11 +59,11 @@ export function Cell({
   // Illumination
   useEffect(() => {
     if (isIlluminated) {
-      fillColor.value = withTiming(themeColor, { duration: 130, easing: Easing.out(Easing.ease) });
+      bgColor.value = withTiming(themeColor, { duration: 130, easing: Easing.out(Easing.ease) });
       scale.value = withTiming(1.06, { duration: 130 });
       glowOpacity.value = withTiming(0.3, { duration: 130 });
     } else {
-      fillColor.value = withTiming(isPoison ? poisonColor : idleColor, { duration: 180 });
+      bgColor.value = withTiming(isPoison ? poisonColor : idleColor, { duration: 180 });
       scale.value = withTiming(1.0, { duration: 150 });
       glowOpacity.value = withTiming(0, { duration: 180 });
     }
@@ -105,7 +73,7 @@ export function Cell({
   useEffect(() => {
     if (tapState === 'correct') {
       if (greenTileFeedback) {
-        fillColor.value = withSequence(
+        bgColor.value = withSequence(
           withTiming(Colors.success, { duration: 80 }),
           withTiming(idleColor, { duration: 280 })
         );
@@ -115,7 +83,7 @@ export function Cell({
         withSpring(1.0, { damping: 14, stiffness: 200 })
       );
     } else if (tapState === 'wrong') {
-      fillColor.value = withSequence(
+      bgColor.value = withSequence(
         withTiming(Colors.danger, { duration: 80 }),
         withTiming(idleColor, { duration: 320 })
       );
@@ -129,7 +97,14 @@ export function Cell({
     }
   }, [tapState, idleColor, greenTileFeedback]);
 
-  // Wrapper handles scale, shake, and glow shadow
+  // Shape-specific border radius
+  const borderRadius = useMemo(() => {
+    if (tileShape === 'circle') return size / 2;
+    if (tileShape === 'hexagon') return size * 0.2;
+    if (tileShape === 'square') return size * 0.12;
+    return size * 0.08; // triangle-ish — slight rounding
+  }, [tileShape, size]);
+
   const wrapperStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }, { translateX: translateX.value }],
     shadowOpacity: glowOpacity.value,
@@ -138,9 +113,8 @@ export function Cell({
     elevation: glowOpacity.value > 0 ? 6 : 0,
   }));
 
-  // SVG fill via animatedProps (the only clean way to drive SVG color)
-  const shapeFill = useAnimatedProps(() => ({
-    fill: fillColor.value,
+  const tileStyle = useAnimatedStyle(() => ({
+    backgroundColor: bgColor.value,
   }));
 
   const handlePress = () => {
@@ -155,36 +129,22 @@ export function Cell({
       style={[{ width: size, height: size, shadowColor: themeColor }, wrapperStyle]}
       onPress={handlePress}
       disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={`Cell ${index + 1}`}
+      accessibilityState={{ disabled }}
     >
-      {/* pointerEvents="none" prevents the SVG subtree from consuming touches
-          so they always reach the AnimatedPressable wrapper */}
-      <Svg width={size} height={size} pointerEvents="none">
-        {tileShape === 'circle' && (
-          <AnimatedCircle
-            cx={size / 2}
-            cy={size / 2}
-            r={(size / 2) * 0.86}
-            animatedProps={shapeFill}
-          />
-        )}
-        {tileShape === 'square' && (
-          <AnimatedRect
-            x={size * 0.07}
-            y={size * 0.07}
-            width={size * 0.86}
-            height={size * 0.86}
-            rx={size * 0.12}
-            ry={size * 0.12}
-            animatedProps={shapeFill}
-          />
-        )}
-        {(tileShape === 'hexagon' || tileShape === 'triangle') && (
-          <AnimatedPolygon
-            points={shapePoints}
-            animatedProps={shapeFill}
-          />
-        )}
-      </Svg>
+      <AnimatedView
+        style={[
+          {
+            width: '100%',
+            height: '100%',
+            borderRadius,
+            borderWidth: 1.5,
+            borderColor: Colors.border,
+          },
+          tileStyle,
+        ]}
+      />
     </AnimatedPressable>
   );
 }

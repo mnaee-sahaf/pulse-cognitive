@@ -34,7 +34,7 @@ export default function ChooseCompanionScreen() {
         <View style={styles.header}>
           <Text style={styles.title}>Choose Your Training</Text>
           <Text style={styles.subtitle}>
-            Pick one cognitive skill to sharpen for free. You can unlock all three modes later.
+            Choose which cognitive skill to start training. You can switch between all 4 modes anytime.
           </Text>
         </View>
 
@@ -47,6 +47,9 @@ export default function ChooseCompanionScreen() {
                 key={c.id}
                 style={[styles.card, isSelected && styles.cardSelected]}
                 onPress={() => setSelected(c.id)}
+                accessibilityRole="button"
+                accessibilityLabel={`Select ${c.name} — trains ${c.trainingFocus}`}
+                accessibilityState={{ selected: isSelected }}
               >
                 <Companion
                   state={{
@@ -90,7 +93,7 @@ export default function ChooseCompanionScreen() {
         </View>
 
         <Text style={styles.freeHint}>
-          Your chosen mode is free forever. Unlock all 3 modes for $7.99 anytime.
+          All 4 training modes are included. Switch anytime from the home screen.
         </Text>
 
         <Pressable
@@ -101,6 +104,9 @@ export default function ChooseCompanionScreen() {
           ]}
           onPress={handleConfirm}
           disabled={!selected || confirming}
+          accessibilityRole="button"
+          accessibilityLabel={selected ? `Confirm ${selected.toUpperCase()} as your training mode` : 'Select a training mode first'}
+          accessibilityState={{ disabled: !selected || confirming }}
         >
           <Text style={styles.ctaText}>
             {confirming ? 'Starting\u2026' : selected ? `Train ${COMPANIONS[selected].trainingFocus}` : 'Select a training mode'}

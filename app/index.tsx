@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Colors, FontSize, Spacing } from '../constants/theme';
+import { Colors, FontSize, Spacing, Pressed } from '../constants/theme';
 import { getLifetimeStats, getCognitiveProfile } from '../db/sessions';
 import {
   loadCompanion,
@@ -19,9 +19,9 @@ import {
 } from '../db/companion';
 import { loadPurchaseState, type PurchaseState } from '../db/purchaseState';
 import { loadStreakState, getStreakLabel, type StreakState } from '../db/streaks';
+import { generateWeeklyReport, trendArrow, type WeeklyReport } from '../db/weeklyReport';
 import { Companion } from '../components/Companion';
 import { CompanionSwitcher } from '../components/CompanionSwitcher';
-import { UpgradePrompt } from '../components/UpgradePrompt';
 import { CognitiveRadar, type RadarDimension } from '../components/CognitiveRadar';
 import { AnimatedBackground } from '../components/AnimatedBackground';
 import { useAppSettings } from '../store/appSettingsStore';
@@ -34,8 +34,8 @@ export default function HomeScreen() {
   const [allCompanions, setAllCompanions] = useState<CompanionState[]>([]);
   const [purchaseState, setPurchaseState] = useState<PurchaseState | null>(null);
   const [streak, setStreak] = useState<StreakState>({ currentStreak: 0, bestStreak: 0, lastSessionDate: null, frozen: false });
+  const [weeklyReport, setWeeklyReport] = useState<WeeklyReport | null>(null);
   const [switcherVisible, setSwitcherVisible] = useState(false);
-  const [upgradeVisible, setUpgradeVisible] = useState(false);
   const animatedBackground = useAppSettings((s) => s.animatedBackground);
   const backgroundIntensity = useAppSettings((s) => s.backgroundIntensity);
 
@@ -52,6 +52,7 @@ export default function HomeScreen() {
     getAllCompanions().then(setAllCompanions).catch(console.error);
     loadPurchaseState().then(setPurchaseState).catch(console.error);
     loadStreakState().then(setStreak).catch(console.error);
+    generateWeeklyReport().then(setWeeklyReport).catch(console.error);
   }, []);
 
   useFocusEffect(loadData);
@@ -63,18 +64,40 @@ export default function HomeScreen() {
   }, [loadData]);
 
   const hasStats = stats.sessionCount > 0;
-  const isFullUnlock = purchaseState?.fullUnlock ?? false;
+  const isFullUnlock = true; // v1: all modes unlocked
   const activeMode = companion?.companionId ?? 'arc';
 
   // Build radar dimensions — lock dimensions not trained by the active mode
   const radarDims: RadarDimension[] = [
-    { label: 'Reaction Speed', shortLabel: 'RT', value: cogProfile.rtScore, color: Colors.accent, locked: !isFullUnlock && activeMode !== 'ember' },
+    { label: 'Processing Speed', shortLabel: 'RT', value: cogProfile.rtScore, color: Colors.accent, locked: !isFullUnlock && activeMode !== 'ember' },
     { label: 'Working Memory', shortLabel: 'WM', value: cogProfile.wmScore, color: '#8B5CF6', locked: !isFullUnlock && activeMode !== 'arc' },
     { label: 'Flexibility', shortLabel: 'FLEX', value: cogProfile.flexScore, color: Colors.warning, locked: !isFullUnlock && activeMode !== 'tide' },
-    { label: 'Decision Speed', shortLabel: 'DEC', value: cogProfile.decisionScore, color: Colors.success, locked: false },
+    { label: 'Decision Efficiency', shortLabel: 'DEC', value: cogProfile.decisionScore, color: Colors.success, locked: false },
   ];
 
   const streakLabel = getStreakLabel(streak.currentStreak);
+
+  // Pulse Index — average of the four cognitive dimensions, this week vs last week.
+  // Surfaces real week-over-week improvement, the single biggest retention lever.
+  const pulseIndex = useMemo(() => {
+    if (!weeklyReport || weeklyReport.sessionsThisWeek === 0) return null;
+    const avg = (a: number, b: number, c: number, d: number) => Math.round((a + b + c + d) / 4);
+    const current = avg(
+      weeklyReport.rtScoreThisWeek,
+      weeklyReport.wmScoreThisWeek,
+      weeklyReport.flexScoreThisWeek,
+      weeklyReport.decisionScoreThisWeek
+    );
+    const previous = weeklyReport.sessionsLastWeek > 0
+      ? avg(
+          weeklyReport.rtScoreLastWeek,
+          weeklyReport.wmScoreLastWeek,
+          weeklyReport.flexScoreLastWeek,
+          weeklyReport.decisionScoreLastWeek
+        )
+      : 0;
+    return { current, previous, sessionsThisWeek: weeklyReport.sessionsThisWeek };
+  }, [weeklyReport]);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -93,10 +116,38 @@ export default function HomeScreen() {
         {companion && (
           <Pressable
             onPress={() => setSwitcherVisible(true)}
-            style={({ pressed }) => [styles.companionTap, pressed && { opacity: 0.8 }]}
+            style={({ pressed }) => [styles.companionTap, pressed && Pressed]}
+            accessibilityRole="button"
+            accessibilityLabel={`Switch training mode. Currently ${companion.companionId.toUpperCase()}.`}
           >
             <Companion state={companion} size={64} showInfo={true} />
             <Text style={styles.switchHint}>TAP TO SWITCH MODE</Text>
+          </Pressable>
+        )}
+
+        {/* Hero metric — Pulse Index this week vs last week */}
+        {pulseIndex && (
+          <Pressable
+            style={({ pressed }) => [styles.heroCard, pressed && Pressed]}
+            onPress={() => router.push('/weekly-report')}
+            accessibilityRole="button"
+            accessibilityLabel={`Pulse Index ${pulseIndex.current}. Open weekly report.`}
+          >
+            <View style={styles.heroLeft}>
+              <Text style={styles.heroLabel}>PULSE INDEX</Text>
+              <Text style={styles.heroValue}>{pulseIndex.current}</Text>
+              <Text style={styles.heroFootnote}>
+                {pulseIndex.sessionsThisWeek} {pulseIndex.sessionsThisWeek === 1 ? 'session' : 'sessions'} this week
+              </Text>
+            </View>
+            {pulseIndex.previous > 0 && (
+              <View style={styles.heroRight}>
+                <Text style={styles.heroTrend}>
+                  {trendArrow(pulseIndex.current, pulseIndex.previous) || '→ flat'}
+                </Text>
+                <Text style={styles.heroTrendHint}>vs last week</Text>
+              </View>
+            )}
           </Pressable>
         )}
 
@@ -120,13 +171,7 @@ export default function HomeScreen() {
           <View style={styles.radarSection}>
             <Text style={styles.sectionLabel}>COGNITIVE PROFILE</Text>
             <CognitiveRadar dimensions={radarDims} size={180} />
-            {!isFullUnlock && (
-              <Pressable onPress={() => setUpgradeVisible(true)}>
-                <Text style={styles.radarHint}>
-                  Unlock all modes to build a complete profile
-                </Text>
-              </Pressable>
-            )}
+            
           </View>
         )}
 
@@ -140,6 +185,9 @@ export default function HomeScreen() {
         <Pressable
           style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}
           onPress={() => router.push('/countdown')}
+          accessibilityRole="button"
+          accessibilityLabel="Begin training session"
+          accessibilityHint="Starts a 60-second cognitive training round"
         >
           <Text style={styles.ctaText}>Begin Session</Text>
         </Pressable>
@@ -149,18 +197,24 @@ export default function HomeScreen() {
             <Pressable
               style={({ pressed }) => [styles.secondaryBtn, { flex: 1 }, pressed && styles.ctaPressed]}
               onPress={() => router.push('/history')}
+              accessibilityRole="button"
+              accessibilityLabel="History"
             >
               <Text style={styles.secondaryBtnText}>History</Text>
             </Pressable>
             <Pressable
               style={({ pressed }) => [styles.secondaryBtn, { flex: 1 }, pressed && styles.ctaPressed]}
               onPress={() => router.push('/weekly-report')}
+              accessibilityRole="button"
+              accessibilityLabel="Weekly report"
             >
               <Text style={styles.secondaryBtnText}>Weekly</Text>
             </Pressable>
             <Pressable
               style={({ pressed }) => [styles.secondaryBtn, styles.settingsBtn, pressed && styles.ctaPressed]}
               onPress={() => router.push('/settings')}
+              accessibilityRole="button"
+              accessibilityLabel="Settings"
             >
               <Text style={styles.secondaryBtnText}>{'\u2699'}</Text>
             </Pressable>
@@ -174,24 +228,9 @@ export default function HomeScreen() {
         companions={allCompanions}
         purchaseState={purchaseState}
         onSelect={handleSwitchCompanion}
-        onUpgrade={() => {
-          setSwitcherVisible(false);
-          setUpgradeVisible(true);
-        }}
+        onUpgrade={() => setSwitcherVisible(false)}
         onClose={() => setSwitcherVisible(false)}
       />
-
-      {purchaseState && (
-        <UpgradePrompt
-          visible={upgradeVisible}
-          freeCompanionId={purchaseState.freeCompanionId}
-          onPurchase={() => {
-            // TODO: wire up IAP via RevenueCat
-            setUpgradeVisible(false);
-          }}
-          onDismiss={() => setUpgradeVisible(false)}
-        />
-      )}
     </SafeAreaView>
   );
 }
@@ -240,13 +279,60 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     textTransform: 'uppercase',
   },
+  // Hero metric — Pulse Index card
+  heroCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.surface,
+    borderRadius: Spacing.cardRadius,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    width: '100%',
+    gap: 12,
+  },
+  heroLeft: { gap: 2, flex: 1 },
+  heroLabel: {
+    fontSize: FontSize.label,
+    fontWeight: '600',
+    color: Colors.textTertiary,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  heroValue: {
+    fontSize: 36,
+    fontFamily: 'serif',
+    fontWeight: '600',
+    color: Colors.textPrimary,
+    letterSpacing: -0.5,
+    lineHeight: 40,
+  },
+  heroFootnote: {
+    fontSize: 12,
+    color: Colors.textTertiary,
+    marginTop: 2,
+  },
+  heroRight: { alignItems: 'flex-end', gap: 2 },
+  heroTrend: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.success,
+    fontFamily: 'serif',
+  },
+  heroTrendHint: {
+    fontSize: 11,
+    color: Colors.textTertiary,
+    letterSpacing: 0.5,
+  },
   // Streak
   streakRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     backgroundColor: Colors.surface,
-    borderRadius: 12,
+    borderRadius: Spacing.cardRadius,
     borderWidth: 1.5,
     borderColor: Colors.border,
     paddingHorizontal: 16,
@@ -322,7 +408,7 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
   },
-  ctaPressed: { opacity: 0.85 },
+  ctaPressed: Pressed,
   ctaText: {
     fontSize: 17,
     fontWeight: '600',

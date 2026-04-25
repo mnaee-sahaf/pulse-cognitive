@@ -116,8 +116,17 @@ export function LevelUpModal({ visible, companion, evolved, onDismiss }: LevelUp
       statusBarTranslucent
       onRequestClose={onDismiss}
     >
-      <Pressable style={styles.backdrop} onPress={onDismiss}>
-        <Animated.View style={[styles.card, containerStyle]}>
+      <Pressable
+        style={styles.backdrop}
+        onPress={onDismiss}
+        accessibilityRole="button"
+        accessibilityLabel="Dismiss level up notification"
+      >
+        <Animated.View
+          style={[styles.card, containerStyle]}
+          accessibilityRole="alert"
+          accessibilityLiveRegion="polite"
+        >
           {/* Background shimmer */}
           <Animated.View
             style={[
@@ -164,6 +173,8 @@ export function LevelUpModal({ visible, companion, evolved, onDismiss }: LevelUp
           <Pressable
             style={[styles.dismissBtn, { backgroundColor: stage.primaryColor }]}
             onPress={onDismiss}
+            accessibilityRole="button"
+            accessibilityLabel="Continue"
           >
             <Text style={styles.dismissText}>Continue</Text>
           </Pressable>

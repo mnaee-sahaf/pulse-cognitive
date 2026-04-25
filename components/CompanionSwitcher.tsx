@@ -27,7 +27,7 @@ interface Props {
 }
 
 export function CompanionSwitcher({ visible, companions, purchaseState, onSelect, onUpgrade, onClose }: Props) {
-  const orderedIds: CompanionId[] = ['arc', 'tide', 'ember'];
+  const orderedIds: CompanionId[] = ['arc', 'tide', 'ember', 'halt'];
 
   return (
     <Modal
@@ -36,8 +36,13 @@ export function CompanionSwitcher({ visible, companions, purchaseState, onSelect
       animationType="slide"
       onRequestClose={onClose}
     >
-      <Pressable style={styles.backdrop} onPress={onClose} />
-      <View style={styles.sheet}>
+      <Pressable
+        style={styles.backdrop}
+        onPress={onClose}
+        accessibilityRole="button"
+        accessibilityLabel="Close companion picker"
+      />
+      <View style={styles.sheet} accessibilityRole="menu" accessibilityLabel="Choose training companion">
         <View style={styles.handle} />
         <Text style={styles.title}>Choose Training Companion</Text>
         <Text style={styles.subtitle}>Each companion unlocks a different cognitive challenge</Text>
@@ -68,7 +73,12 @@ export function CompanionSwitcher({ visible, companions, purchaseState, onSelect
           </Pressable>
         )}
 
-        <Pressable style={styles.cancelBtn} onPress={onClose}>
+        <Pressable
+          style={styles.cancelBtn}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Cancel"
+        >
           <Text style={styles.cancelText}>Cancel</Text>
         </Pressable>
       </View>
@@ -90,6 +100,9 @@ function CompanionInfoCard({ state, locked = false, onPress }: { state: Companio
         pressed && styles.cardPressed,
       ]}
       onPress={onPress}
+      accessibilityRole="menuitem"
+      accessibilityLabel={`${def.name} — ${def.trainingFocus}, level ${state.level}${isActive ? ', currently active' : ''}${locked ? ', locked' : ''}`}
+      accessibilityState={{ selected: isActive, disabled: locked }}
     >
       {/* Top row: shape + name block + active badge */}
       <View style={styles.cardHeader}>
@@ -245,7 +258,7 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 10,
   },
-  cardPressed: { opacity: 0.82 },
+  cardPressed: { opacity: 0.85 },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
